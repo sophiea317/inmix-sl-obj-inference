@@ -1,6 +1,5 @@
 # stimuli_generation.py
 
-# import necessary packages
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,119 +7,156 @@ import matplotlib.image as mpimg
 import numpy as np
 from numpy.random import randint, choice as randchoice
 
+def load_stimuli(stim_folder="assets"):
+    """Load and categorize stimuli from the folder."""
+    stim_set = [f for f in os.listdir(stim_folder) if f.endswith(".png")]
+    unique_stim = [f for f in stim_set if "set" not in f]
+    linking_stim = [f for f in stim_set if "set" in f]
 
-# set up experiment parameters
-stim_folder = "assets"
-stim_set = [f for f in os.listdir(stim_folder) if f.endswith(".png")]
-stim_num = len(stim_set)
-unique_stim = [f for f in stim_set if "set" not in f]
-linking_stim = [f for f in stim_set if "set" in f]
+    # separate linking stimuli by set
+    linking_stim_by_set = {}
+    for f in np.sort(linking_stim):
+        set_id = f.split("_")[0]
+        linking_stim_by_set.setdefault(set_id, []).append(f)
 
-print("Linking stimuli:", linking_stim, "\nTotal:", len(linking_stim))
-print("Unique stimuli:", unique_stim, "\nTotal:", len(unique_stim))
+    return unique_stim, linking_stim_by_set
 
-# separate linking stimuli by set (sorted to keep order)
-linking_stim_by_set = {}
-for f in np.sort(linking_stim):
-    set_id = f.split("_")[0]
-    if set_id not in linking_stim_by_set:
-        linking_stim_by_set[set_id] = []
-    linking_stim_by_set[set_id].append(f)
-num_linking_sets = len(linking_stim_by_set)
-print("Number of linking sets:", num_linking_sets)
-print("Linking stimuli by set:", linking_stim_by_set)
+def generate_pairs(exp_info, unique_stim, linking_stim_by_set, stim_folder="assets"):
+    """
+    Generate AB, BC, CD stimulus groups for the SL-Obj-Inference task.
+    
+    Args:
+        stim_folder (str): path to folder with images
+        make_plot (bool): whether to save a QA plot of stimuli groupings
+        seed (int or None): random seed for reproducibility
+    
+    Returns:
+        abcd_groups (dict): dict with A, B, C, D groups (stimulus assignments)
+        trials_df (pd.DataFrame): trial-level dataframe for PsychoPy TrialHandler
+    """
+    # Seed random generator per subject for reproducibility
+    np.random.seed(int(exp_info["subject"]))
 
-# assign the 6 BC pairs by first tasking img-02 in each set and randomly choose either img-01 or img-03 as the other item in the pair. 
-# then take img-04 in each set and pair it with img-05 or img-03 (if not already used) to make the second BC pair for each set.
-b_stim = {}
-c_stim = {}
-pair_counter = 0
-for set_id, imgs in linking_stim_by_set.items():
-    # first BC pair
-    first_item = imgs[1]  # img-02
-    second_item = randchoice([imgs[0], imgs[2]])  # img-01 or img-03
-    if randint(0, 2) == 0:
-        b_stim[pair_counter] = first_item
-        c_stim[pair_counter] = second_item
-    else:
-        b_stim[pair_counter] = second_item
-        c_stim[pair_counter] = first_item
-    pair_counter += 1
+    b_stim, c_stim = {}, {}
+    pair_counter = 0
 
-    # second BC pair
-    first_item = imgs[3]  # img-04
-    if imgs[2] not in c_stim.values() and imgs[2] not in b_stim.values():
-        second_item = imgs[2]
-    else:
-        second_item = imgs[4]  # img-05
-        
-    # randomize order within the pair
-    if randint(0, 2) == 0:
-        b_stim[pair_counter] = first_item
-        c_stim[pair_counter] = second_item
-    else:
-        b_stim[pair_counter] = second_item
-        c_stim[pair_counter] = first_item
-    pair_counter += 1
+    output_prefix = u'sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
 
-    # gather images not in assigned as B or C stim
+    # --- Generate B-C pairs ---
+    for set_id, imgs in linking_stim_by_set.items():
+        # first BC pair: img-02 + random(img-01/img-03)
+        first_item = imgs[1]  # img-02
+        second_item = np.random.choice([imgs[0], imgs[2]])
+        if np.random.randint(0, 2) == 0:
+            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = first_item, second_item
+        else:
+            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = second_item, first_item
+        pair_counter += 1
+
+        # second BC pair: img-04 + (img-03/img-05)
+        first_item = imgs[3]  # img-04
+        if imgs[2] not in c_stim.values() and imgs[2] not in b_stim.values():
+            second_item = np.random.choice([imgs[2], imgs[4]])
+        else:
+            second_item = imgs[4]
+        if np.random.randint(0, 2) == 0:
+            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = first_item, second_item
+        else:
+            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = second_item, first_item
+        pair_counter += 1
+
+    # collect unused
     used_imgs = list(b_stim.values()) + list(c_stim.values())
-    unused_imgs = [img for img in linking_stim if img not in used_imgs]
-# print the B and C stimuli to visually check
-print("B stimuli:", b_stim)
-print("C stimuli:", c_stim)
+    unused_imgs = [img for imgs in linking_stim_by_set.values() for img in imgs if img not in used_imgs]
+    remaining_stim = unique_stim + unused_imgs
 
-# combine unused linking stimuli with unique stimuli
-remaining_stim = unique_stim + unused_imgs
-print("Non-BC stimuli:", remaining_stim, "\nTotal:", len(remaining_stim))
+    # --- Generate A and D stimuli ---
+    a_stim, d_stim = {}, {}
+    used_sets = set()
+    bc_pairs = list(zip(b_stim.values(), c_stim.values()))
 
-# print the BC pairs to visually check
-bc_pairs = list(zip(b_stim.values(), c_stim.values()))
-print("BC pairs:")
-for i, pair in enumerate(bc_pairs):
-    print(f"Pair {i+1}: {pair[0]} & {pair[1]}")
+    for i, (b_img, c_img) in enumerate(bc_pairs):
+        # extract set IDs for B and C
+        b_set = b_img.split("_")[0]
+        c_set = c_img.split("_")[0]
+        forbidden_sets = {b_set, c_set}  # cannot reuse for A or D in this pair
 
-# assign the 6 A and 6 D stimuli by randomly selecting from the remaining stimuli. the images from the same set should not be assigned to A and D.
-a_stim = {}
-d_stim = {}
-used_sets = set()
-for i in range(len(bc_pairs)):
-    while True:
-        candidate_a = randchoice(remaining_stim)
-        candidate_d = randchoice(remaining_stim)
-        set_a = candidate_a.split("_")[0]
-        set_d = candidate_d.split("_")[0]
-        if set_a != set_d and set_a not in used_sets and set_d not in used_sets:
-            a_stim[f"A{i+1}"] = candidate_a
-            d_stim[f"D{i+1}"] = candidate_d
-            used_sets.update([set_a, set_d])
-            remaining_stim.remove(candidate_a)
-            remaining_stim.remove(candidate_d)
-            break
+        while True:
+            candidate_a = np.random.choice(remaining_stim)
+            candidate_d = np.random.choice(remaining_stim)
 
-abcd_groups = {
-    "A": a_stim,
-    "B": b_stim,
-    "C": c_stim,
-    "D": d_stim
-}
+            set_a = candidate_a.split("_")[0]
+            set_d = candidate_d.split("_")[0]
 
-# print abcd groups to visually check
-for group, items in abcd_groups.items():
-    print(f"{group} stimuli:")
-    for label, img in items.items():
-        print(f"  {label}: {img}")
-    print()
+            # check conditions:
+            # 1. A and D not from the same set
+            # 2. Neither A nor D from the same set as B–C of this pair
+            # 3. Neither A nor D from sets already used in other pairs
+            if (
+                set_a != set_d
+                and set_a not in forbidden_sets
+                and set_d not in forbidden_sets
+                and set_a not in used_sets
+                and set_d not in used_sets
+            ):
+                a_stim[f"A{i+1}"] = candidate_a
+                d_stim[f"D{i+1}"] = candidate_d
+                used_sets.update([set_a, set_d])
+                remaining_stim.remove(candidate_a)
+                remaining_stim.remove(candidate_d)
+                break
 
 
-# plot the stimuli for each group number to visual check
-fig, axes = plt.subplots(6, 4, figsize=(18, 18))
-for i, (group, items) in enumerate(abcd_groups.items()):
-    for j, (label, img) in enumerate(items.items()):
-        ax = axes[j, i]
-        img_data = mpimg.imread(os.path.join(stim_folder, img))
-        ax.imshow(img_data)
-        ax.set_title(f"{group}{j+1}")
-        ax.axis('off')
-plt.tight_layout()
-plt.savefig("qa/stimuli_check.png")
+    # shuffle the 6 rows of each stimulus assignment
+    row_indices = np.arange(len(a_stim))
+    np.random.shuffle(row_indices)
+    # reorder each stim dict by the shuffled indices
+    a_stim = {f"A{i+1}": a_stim[f"A{row_indices[i]+1}"] for i in range(len(a_stim))}
+    b_stim = {f"B{i+1}": b_stim[f"B{row_indices[i]+1}"] for i in range(len(b_stim))}
+    c_stim = {f"C{i+1}": c_stim[f"C{row_indices[i]+1}"] for i in range(len(c_stim))}
+    d_stim = {f"D{i+1}": d_stim[f"D{row_indices[i]+1}"] for i in range(len(d_stim))}
+
+    abcd_groups = {"A": a_stim, "B": b_stim, "C": c_stim, "D": d_stim}
+
+    # --- Save assignments to CSV ---
+    df_rows = []
+    num_pairs = len(abcd_groups["A"])  # assume A, B, C, D all same length
+
+    for pair_idx in range(num_pairs):
+        for stim_label in ["A", "B", "C", "D"]:
+            img = list(abcd_groups[stim_label].values())[pair_idx]
+            df_rows.append({
+                "subject": exp_info["subject"],
+                "session": exp_info["session"],
+                "group_num": pair_idx + 1,   # 1-based
+                "stim_label": stim_label,
+                "image": img
+            })
+
+    df = pd.DataFrame(df_rows)
+    out_dir = "data"
+    os.makedirs(out_dir, exist_ok=True)
+    df.to_csv(os.path.join(out_dir, f"{output_prefix}_stim-assignments.csv"), index=False)
+
+    return abcd_groups
+
+
+def plot_stimuli(exp_info, abcd_groups, stim_folder="assets"):
+    """Plot all assigned stimuli for QA."""
+    fig, axes = plt.subplots(6, 4, figsize=(18, 18))
+    for i, (group, items) in enumerate(abcd_groups.items()):
+        for j, (label, img) in enumerate(items.items()):
+            ax = axes[j, i]
+            img_data = mpimg.imread(os.path.join(stim_folder, img))
+            ax.imshow(img_data)
+            ax.set_title(f"{group}{j+1}")
+            ax.axis("off")
+    plt.tight_layout()
+    
+    output_prefix = u'sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
+    out_dir = "qa"
+    os.makedirs(out_dir, exist_ok=True)
+    save_path = os.path.join(out_dir, f"{output_prefix}_stim-groups.png")
+    plt.savefig(save_path)
+    plt.close()
+    
