@@ -163,55 +163,20 @@ def generate_obj_stream(exp_info, abcd_groups):
     num_stim = exp_info["num_stim|hid"]
     num_grps = exp_info["num_grps|hid"]
     prob_1back = exp_info["prob_1back|hid"]
-    rep = exp_info["num_reps|hid"]
-    stim_1back = int(rep * prob_1back * 2)  # number of 1-back trials for a stimulus
-    n_pairs_stream1 = num_grps * 2  # number of groups in the 1st visual stream (A-B and C-D)
-    n_pairs_stream2 = num_grps      # number of groups in the 2nd visual stream (B-C)
-    n_trials_stream1 = n_pairs_stream1 * rep
-    n_trials_stream2 = n_pairs_stream2 * rep
-    
-    
-    #   ** defining parameters for the experiment
-    #   const prop1back = 0.10;                                 // prortion of trials that are 1-back trials
-    #   const nBins = 5;                                        // number of bins for distributing 1-back trials
-    #   const stimOneback = rep * prop1back * 2;                // number of 1-back trials for a stimulus
-    #   const nPairsVisStm1 = grps * 2;                         // number of groups in the 1st visual stream
-    #   const nPairsVisStm2 = grps;                             // number of groups in the 2nd visual stream
-    #   const pairRepsVisStm1 = nPairsVisStm1 * rep;            // total number of trials in the 1st visual stream
-    #   const pairRepsVisStm2 = nPairsVisStm2 * rep;            // total number of trials in the 2nd visual stream
-    #   const pairTrlsVisStm1 = pairRepsVisStm1 * 2;            // total number of paired trials in the 1st visual stream
-    #   const pairTrlsVisStm2 = pairRepsVisStm2 * 2;            // total number of paired trials in the 2nd visual stream
-    #   const nStimPerGroup = nStim / grps;                     // number of stimuli per group 
-    #   const pairIdx1 = [1, 0];                                // 1-back trial indices for the 1st image in the pair
-    #   const pairIdx2 = [0, 1];                                // 1-back trial indices for the 2nd image in the pair
-    #   const blockTestPairs = {"AB": 0, "BC": 1, "CD": 2};     // define mapping of condition IDs to block test pairs
-    
-    # Create the base sequence of stimuli (A1, B1, C1, D1, A2, B2, ..., D6)
-    base_sequence = []
-    for i in range(len(abcd_groups["A"])):
-        for group in ["A", "B", "C", "D"]:
-            base_sequence.append(abcd_groups[group][f"{group}{i+1}"])
-    
-    # Repeat the base sequence
-    obj_stream = base_sequence * num_reps
-    
-    # Introduce 1-back repeats
-    final_stream = []
-    i = 0
-    while i < len(obj_stream):
-        if i > 0 and np.random.rand() < prob_1back:
-            final_stream.append({
-                "trial_num": len(final_stream) + 1,
-                "image": obj_stream[i-1],
-                "is_1back": True
-            })
-        else:
-            final_stream.append({
-                "trial_num": len(final_stream) + 1,
-                "image": obj_stream[i],
-                "is_1back": False
-            })
-            i += 1
-        # If a 1-back was added, do not increment i to allow possible consecutive repeats
+    reps = exp_info["num_reps|hid"]
+    stim_1back = int(reps * prob_1back * 2)         # number of 1-back trials for a stimulus
+    n_pairs_stream1 = num_grps * 2                  # number of groups in the 1st visual stream (A-B and C-D)
+    n_pairs_stream2 = num_grps                      # number of groups in the 2nd visual stream (B-C)
+    n_pair_trls_stream1 = n_pairs_stream1 * reps    # total number of paired trials in the 1st visual stream
+    n_pair_trls_stream2 = n_pairs_stream2 * reps    # total number of paired trials in the 2nd visual stream
+    n_stim_trls_stream1 = n_pair_trls_stream1 * 2        # total number of trials in the 1st visual stream
+    n_stim_trls_stream2 = n_pair_trls_stream2 * 2        # total number of trials in the 2nd visual stream
+    n_stim_per_grp = num_stim // num_grps           # number of stimuli per group
+    pair_idx1 = [1, 0]                              # 1-back index for the 1st image in the pair
+    pair_idx2 = [0, 1]                              # 1-back index for the 2nd image in the pair
+    block_test_pairs = {"AB": 0, "BC": 1, "CD": 2}  # mapping of condition IDs to block test pairs
 
-    return final_stream
+    n_trls_stream1 = n_stim_trls_stream1 + (n_stim_trls_stream1 * prob_1back)
+    n_trls_stream2 = n_stim_trls_stream2 + (n_stim_trls_stream2 * prob_1back)
+
+    return 
