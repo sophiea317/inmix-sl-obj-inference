@@ -30,6 +30,7 @@ exp_info = {
     "exp_name|hid": exp_name,
     "psychopyVersion|hid": psychopy_ver,
 }
+exp_info['file_prefix'] = u'sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
 
 print("=== Debugging stimuli_generation ===")
 print(f"Subject: {exp_info['subject']}, Session: {exp_info['session']}")
@@ -46,6 +47,8 @@ except Exception as e:
     raise
 
 print("\nStimulus generation successful!\n")
+
+print("abcd_groups:", abcd_groups)
 
 # ----------------------
 # Print debugging info with set IDs

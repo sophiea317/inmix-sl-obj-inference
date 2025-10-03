@@ -48,6 +48,9 @@ if not os.path.isdir("data"):
 # define output filename
 filename = u'data/sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
 
+# add filename to exp_info dict (for later saving of data)
+exp_info['file_prefix'] = filename
+
 # setup experiment handler
 this_exp = data.ExperimentHandler(
     name="Inmix-SL-Obj-Inference",

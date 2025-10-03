@@ -21,26 +21,18 @@ def load_stimuli(stim_folder="assets"):
 
     return unique_stim, linking_stim_by_set
 
-def generate_pairs(exp_info, unique_stim, linking_stim_by_set, stim_folder="assets"):
+def generate_pairs(exp_info, unique_stim, linking_stim_by_set):
     """
     Generate AB, BC, CD stimulus groups for the SL-Obj-Inference task.
     
-    Args:
-        stim_folder (str): path to folder with images
-        make_plot (bool): whether to save a QA plot of stimuli groupings
-        seed (int or None): random seed for reproducibility
-    
     Returns:
         abcd_groups (dict): dict with A, B, C, D groups (stimulus assignments)
-        trials_df (pd.DataFrame): trial-level dataframe for PsychoPy TrialHandler
     """
     # Seed random generator per subject for reproducibility
     np.random.seed(int(exp_info["subject"]))
 
     b_stim, c_stim = {}, {}
     pair_counter = 0
-
-    output_prefix = u'sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
 
     # --- Generate B-C pairs ---
     for set_id, imgs in linking_stim_by_set.items():
@@ -74,36 +66,35 @@ def generate_pairs(exp_info, unique_stim, linking_stim_by_set, stim_folder="asse
     a_stim, d_stim = {}, {}
     used_sets = set()
     bc_pairs = list(zip(b_stim.values(), c_stim.values()))
+    ad_stim_choices = remaining_stim.copy()
 
     for i, (b_img, c_img) in enumerate(bc_pairs):
-        # extract set IDs for B and C
-        b_set = b_img.split("_")[0]
-        c_set = c_img.split("_")[0]
-        forbidden_sets = {b_set, c_set}  # cannot reuse for A or D in this pair
-
         while True:
-            candidate_a = np.random.choice(remaining_stim)
-            candidate_d = np.random.choice(remaining_stim)
-
+            # if no more valid candidates, restart all A/D assignments
+            if len(ad_stim_choices) < 2:
+                a_stim.clear()
+                d_stim.clear()
+                used_sets.clear()
+                ad_stim_choices = remaining_stim.copy()
+                i = -1  # reset loop to start (will increment to 0 in next iteration)
+                bc_pairs = list(zip(b_stim.values(), c_stim.values()))
+                break
+            
+            candidate_a = np.random.choice(ad_stim_choices)
+            candidate_d = np.random.choice(ad_stim_choices)
             set_a = candidate_a.split("_")[0]
             set_d = candidate_d.split("_")[0]
-
-            # check conditions:
-            # 1. A and D not from the same set
-            # 2. Neither A nor D from the same set as B–C of this pair
-            # 3. Neither A nor D from sets already used in other pairs
-            if (
-                set_a != set_d
-                and set_a not in forbidden_sets
-                and set_d not in forbidden_sets
-                and set_a not in used_sets
-                and set_d not in used_sets
+            forbidden_sets = {b_img.split("_")[0], c_img.split("_")[0]}
+            
+            if (set_a != set_d and 
+                set_a not in forbidden_sets and set_d not in forbidden_sets and
+                set_a not in used_sets and set_d not in used_sets
             ):
                 a_stim[f"A{i+1}"] = candidate_a
                 d_stim[f"D{i+1}"] = candidate_d
-                used_sets.update([set_a, set_d])
-                remaining_stim.remove(candidate_a)
-                remaining_stim.remove(candidate_d)
+                used_sets.update({set_a, set_d})
+                ad_stim_choices.remove(candidate_a)
+                ad_stim_choices.remove(candidate_d)
                 break
 
 
@@ -136,7 +127,7 @@ def generate_pairs(exp_info, unique_stim, linking_stim_by_set, stim_folder="asse
     df = pd.DataFrame(df_rows)
     out_dir = "data"
     os.makedirs(out_dir, exist_ok=True)
-    df.to_csv(os.path.join(out_dir, f"{output_prefix}_stim-assignments.csv"), index=False)
+    df.to_csv(os.path.join(out_dir, f"{exp_info['file_prefix']}_stim-assignments.csv"), index=False)
 
     return abcd_groups
 
@@ -153,10 +144,9 @@ def plot_stimuli(exp_info, abcd_groups, stim_folder="assets"):
             ax.axis("off")
     plt.tight_layout()
     
-    output_prefix = u'sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
     out_dir = "qa"
     os.makedirs(out_dir, exist_ok=True)
-    save_path = os.path.join(out_dir, f"{output_prefix}_stim-groups.png")
+    save_path = os.path.join(out_dir, f"{exp_info['file_prefix']}_stim-groups.png")
     plt.savefig(save_path)
     plt.close()
     
