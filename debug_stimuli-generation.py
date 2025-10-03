@@ -14,7 +14,7 @@ def get_set_id(filename: str) -> str:
         return filename.split("_")[0]  # e.g., 'set-01'
     return "unique"
 
-
+plotting = True  # set to True to visualize stimulus group assignments
 # ----------------------
 # set up experiment info
 # ----------------------
@@ -29,6 +29,11 @@ exp_info = {
     "date|hid": data.getDateStr(format="%Y%m%d-%H%M"),
     "exp_name|hid": exp_name,
     "psychopyVersion|hid": psychopy_ver,
+    "file_prefix|hid": "",  # will be set below
+    "num_stim|hid": 24,
+    "num_grps|hid": 6,
+    "num_reps|hid": 40,
+    "prob_1back|hid": 0.1,
 }
 exp_info['file_prefix'] = u'sub-%s_%s_expo-%s_test-%s_%s' % (exp_info['subject'], exp_info['exp_name|hid'], exp_info['exposure'], exp_info['test'].replace("-", ""), exp_info['date|hid'])
 
@@ -41,7 +46,8 @@ print(f"Subject: {exp_info['subject']}, Session: {exp_info['session']}")
 try:
     unique_stim, linking_stim_by_set = stimgen.load_stimuli("assets")
     abcd_groups = stimgen.generate_pairs(exp_info, unique_stim, linking_stim_by_set)
-    stimgen.plot_stimuli(exp_info, abcd_groups)
+    if plotting := True:
+        stimgen.plot_stimuli(exp_info, abcd_groups)
 except Exception as e:
     print("Error during stimulus generation:", e)
     raise
