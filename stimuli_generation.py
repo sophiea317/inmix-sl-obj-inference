@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
+import random
 from numpy.random import randint, choice as randchoice
 
 def load_stimuli(stim_folder="assets"):
@@ -157,7 +158,6 @@ def generate_obj_stream(exp_info, abcd_groups):
     Returns:
         obj_stream (list): list of dicts with 'trial_num', 'image', 'is_1back'
     """
-
     
     # --- Parameters ---
     num_stim = exp_info["num_stim|hid"]
@@ -169,14 +169,293 @@ def generate_obj_stream(exp_info, abcd_groups):
     n_pairs_stream2 = num_grps                      # number of groups in the 2nd visual stream (B-C)
     n_pair_trls_stream1 = n_pairs_stream1 * reps    # total number of paired trials in the 1st visual stream
     n_pair_trls_stream2 = n_pairs_stream2 * reps    # total number of paired trials in the 2nd visual stream
-    n_stim_trls_stream1 = n_pair_trls_stream1 * 2        # total number of trials in the 1st visual stream
-    n_stim_trls_stream2 = n_pair_trls_stream2 * 2        # total number of trials in the 2nd visual stream
+    n_stim_trls_stream1 = n_pair_trls_stream1 * 2   # total number of trials in the 1st visual stream
+    n_stim_trls_stream2 = n_pair_trls_stream2 * 2   # total number of trials in the 2nd visual stream
     n_stim_per_grp = num_stim // num_grps           # number of stimuli per group
-    pair_idx1 = [1, 0]                              # 1-back index for the 1st image in the pair
-    pair_idx2 = [0, 1]                              # 1-back index for the 2nd image in the pair
-    block_test_pairs = {"AB": 0, "BC": 1, "CD": 2}  # mapping of condition IDs to block test pairs
+    pair_idx1, pair_idx2 = [1, 0], [0, 1]           # 1-back index for the 1st and 2nd image in the pair
+    #block_test_pairs = {"AB": 0, "BC": 1, "CD": 2}  # mapping of condition IDs to block test pairs
+    # pair_indices_streamX = n_pairs_stream1/num_grps -> [0,1,2,3,4,5,0,1,2,3,4,5,...]
+    pair_indices_stream1 = [i % num_grps for i in range(n_pairs_stream1)] # [0,1,2,3,4,5,0,1,2,3,4,5,...]
+    pair_indices_stream2 = [i % num_grps for i in range(n_pairs_stream2)] # [0,1,2,3,4,5,...]
+    n_each_bin = reps
+    n_bins = 5
+    n_bins_stream1 = n_pair_trls_stream1 // n_each_bin
+    n_bins_stream2 = n_pair_trls_stream2 // n_each_bin
+    bins_stream1 = getbins(n_pair_trls_stream1, n_bins)
+    bins_stream2 = getbins(n_pair_trls_stream2, n_bins)
+
+    print(f"stream 1: trials = {n_pair_trls_stream1}\t bins={bins_stream1}\n"
+          f"stream 2: trials = {n_pair_trls_stream2}\t bins={bins_stream2}\n")
 
     n_trls_stream1 = n_stim_trls_stream1 + (n_stim_trls_stream1 * prob_1back)
     n_trls_stream2 = n_stim_trls_stream2 + (n_stim_trls_stream2 * prob_1back)
+    
+    success = False
+    attempts = 0
+    maxAttempts = 1000
+    
+    while not success and attempts < maxAttempts:
+        attempts += 1
+        try:
+            indices_stream1 = getsequences(n_pairs_stream1, reps, pair_indices_stream1)
+            indices_stream2 = getsequences(n_pairs_stream2, reps, pair_indices_stream2)
+            
+            print(f"indices stream 1 (len={len(indices_stream1)}): {indices_stream1}")
+            print(f"indices stream 2 (len={len(indices_stream2)}): {indices_stream2}")
 
-    return 
+            list_1back_stream1 = zeroslike(indices_stream1)
+            list_1back_stream2 = zeroslike(indices_stream2)
+
+            group_1back_stream1, group_1back_stream2 = [], []
+            exclude_1back_stream1, exclude_1back_stream2 = [], []
+            
+            assignOneBacks(n_pairs_stream1, indices_stream1, bins_stream1, exclude_1back_stream1,
+                           list_1back_stream1, group_1back_stream1, "1st visual stream", stim_1back,
+                           pair_idx1, pair_idx2)
+            assignOneBacks(n_pairs_stream2, indices_stream2, bins_stream2, exclude_1back_stream2,
+                           list_1back_stream2, group_1back_stream2, "2nd visual stream", stim_1back,
+                           pair_idx1, pair_idx2)
+            success = True
+        except Exception as e:
+            print(f"⚠️ Restarting attempt {attempts}: {e}")
+    if not success:
+        raise RuntimeError(f"Failed to assign 1-backs after {maxAttempts} attempts")     
+
+    exposure_obj_stream = []
+    
+    return exposure_obj_stream
+
+# ============================================================
+# Core 1-Back Assignment Function
+# ============================================================
+
+def assignOneBacks(numPairs, idxByPair, bins, excluded, onebackArray,
+                   onebackPair, label, stimOneback, pairIdx1, pairIdx2):
+    for i in range(numPairs):
+        idxPair = where(idxByPair, lambda val, _: val == i)
+        binCounts = np.random.multinomial(stimOneback, [1/(len(bins)-1)]*(len(bins)-1))
+        onebackIdxs = []
+
+        for j in range(len(bins) - 1):
+            validIdx = negbool(isin(idxPair, excluded))
+            binFiltered = [idx for k, idx in enumerate(idxPair)
+                           if validIdx[k] and bins[j] <= idx < bins[j + 1]]
+
+            if len(binFiltered) >= binCounts[j]:
+                onebackIdxs.extend(sample(binFiltered, binCounts[j]))
+            else:
+                print(f"⚠️ No valid samples for {label} (pair {i}, bin {j}) — restarting")
+                raise ValueError(f"No valid samples for {label}")
+
+        excluded.extend(expandselct(onebackIdxs))
+        onebackIdxsShuff = shuffle(onebackIdxs)
+        onebackPair.extend(onebackIdxsShuff)
+
+        for k, idx in enumerate(onebackIdxsShuff):
+            onebackArray[idx] = pairIdx1 if k < stimOneback / 2 else pairIdx2
+
+# ============================================================
+# Helper functions for 1-back logic
+# ============================================================
+
+def getbins(end, num):
+    start = 1
+    step = (end - start) / (num - 1)
+    result = []
+    for i in range(num):
+        val = start + i * step
+        result.append(int(val))
+    result[-1] -= 2 # subtract 2 because of zero-based indexing and to ensure the last trial is not a 1-back trial
+    return result
+
+def range_list(n, start=0, step=1):
+    return list(range(start, n, step))
+
+def sample(array, count):
+    return random.sample(array, count)
+
+def shuffle(arr):
+    a = arr.copy()
+    random.shuffle(a)
+    return a
+
+def randint_int(min_, max_):
+    return random.randint(min_, max_ - 1)
+
+def zeroslike(arr):
+    if isinstance(arr[0], list):
+        return [[0 for _ in row] for row in arr]
+    else:
+        return [0 for _ in arr]
+
+def where(arr, predicate):
+    return [i for i, v in enumerate(arr) if predicate(v, i)]
+
+def isin(array, values):
+    valueset = set(values)
+    return [x in valueset for x in array]
+
+def negbool(bool_list):
+    return [not b for b in bool_list]
+
+def expandselct(indices, by=1):
+    expanded = []
+    for i in indices:
+        expanded.extend([i - by, i, i + by])
+    return expanded
+
+def weightedchoice(population, weights):
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        raise ValueError("No weights > 0")
+    r = random.random() * total_weight
+    for item, w in zip(population, weights):
+        if w > 0:
+            if r < w:
+                return item
+            r -= w
+    raise ValueError("Choice error")
+
+def sendback(value, number, lst):
+    idx = len(lst) - 2
+    for _ in range(number):
+        while lst[idx] == value or lst[idx - 1] == value:
+            idx -= 1
+        lst.insert(idx, value)
+
+def getsequences(nbvalues, repeats, pair_indices, distribution_bins=5):
+    """
+    Generate sequences with constraints and even distribution.
+    
+    Args:
+        nbvalues: Number of unique indices (0 to nbvalues-1)
+        repeats: How many times each index should appear
+        pair_indices: List mapping each index to a pair group (for consecutive constraint)
+        distribution_bins: Number of bins to distribute repetitions across for even distribution
+    
+    Returns:
+        List of indices with constraints satisfied and even distribution
+    """
+    population = range_list(nbvalues)
+    total_length = nbvalues * repeats
+    
+    print(f"getsequences: nbvalues={nbvalues}, repeats={repeats}, pair_indices={pair_indices}")
+    print(f"population: {population}, distribution_bins: {distribution_bins}")
+    
+    # If distribution_bins is 1 or not specified properly, use original algorithm
+    if distribution_bins <= 1:
+        return _getsequences_original(nbvalues, repeats, pair_indices)
+    
+    # Create bins for even distribution
+    bin_size = total_length // distribution_bins
+    all_sequences = []
+    
+    for bin_idx in range(distribution_bins):
+        bin_start = bin_idx * bin_size
+        bin_end = (bin_idx + 1) * bin_size if bin_idx < distribution_bins - 1 else total_length
+        bin_length = bin_end - bin_start
+        
+        # Calculate repetitions per bin for each index
+        # Distribute evenly with remainder distributed across different bins for different indices
+        bin_weights = []
+        for i in range(nbvalues):
+            base_reps = repeats // distribution_bins
+            # Stagger the extra repetitions so different indices get extras in different bins
+            if (i + bin_idx) % distribution_bins < (repeats % distribution_bins):
+                base_reps += 1
+            bin_weights.append(base_reps)
+        
+        # Generate sequence for this bin using similar logic to original
+        bin_sequence = _generate_bin_sequence(population, bin_weights, pair_indices, all_sequences)
+        all_sequences.extend(bin_sequence)
+    
+    return all_sequences
+
+def _getsequences_original(nbvalues, repeats, pair_indices):
+    """Original algorithm for fallback"""
+    population = range_list(nbvalues)
+    weights = [repeats] * nbvalues
+    out = []
+    prev = None
+    prev_pair_group = None
+    
+    for _ in range(nbvalues * repeats):
+        temp_weights = weights.copy()
+        if prev is not None:
+            temp_weights[prev] = 0
+            for i, pair_group in enumerate(pair_indices):
+                if pair_group == prev_pair_group:
+                    temp_weights[i] = 0
+        
+        try:
+            chosen = weightedchoice(population, temp_weights)
+        except ValueError as e:
+            if "No weights > 0" in str(e):
+                sendback(prev, weights[prev], out)
+                break
+            else:
+                raise
+        
+        out.append(chosen)
+        weights[chosen] -= 1
+        prev = chosen
+        prev_pair_group = pair_indices[chosen]
+    
+    return out
+
+def _generate_bin_sequence(population, bin_weights, pair_indices, prev_sequences):
+    """Generate sequence for a single bin with constraints"""
+    weights = bin_weights.copy()
+    bin_sequence = []
+    
+    # Determine previous context from the last item in previous sequences
+    prev = prev_sequences[-1] if prev_sequences else None
+    prev_pair_group = pair_indices[prev] if prev is not None else None
+    
+    target_length = sum(bin_weights)
+    consecutive_failures = 0
+    max_failures = 3  # Allow some flexibility when constraints are too restrictive
+    
+    for _ in range(target_length):
+        temp_weights = weights.copy()
+        constraint_applied = False
+        
+        if prev is not None:
+            # Don't repeat the exact same index consecutively
+            temp_weights[prev] = 0
+            constraint_applied = True
+            
+            # Don't use indices from the same pair group consecutively (if possible)
+            pair_constrained_weights = temp_weights.copy()
+            for i, pair_group in enumerate(pair_indices):
+                if pair_group == prev_pair_group:
+                    pair_constrained_weights[i] = 0
+            
+            # Use pair-constrained weights if we have valid choices
+            if sum(pair_constrained_weights) > 0:
+                temp_weights = pair_constrained_weights
+            elif consecutive_failures < max_failures:
+                # If pair constraint is too restrictive, track failures but keep trying
+                consecutive_failures += 1
+        
+        # If no valid choices at all, we need to break the constraints
+        if sum(temp_weights) == 0:
+            temp_weights = weights.copy()
+            # As a last resort, allow everything (this should be very rare)
+            if sum(temp_weights) == 0:
+                break
+        
+        try:
+            chosen = weightedchoice(population, temp_weights)
+            # Reset failure counter on successful choice
+            if prev is None or pair_indices[chosen] != prev_pair_group:
+                consecutive_failures = 0
+        except ValueError:
+            break
+        
+        bin_sequence.append(chosen)
+        weights[chosen] -= 1
+        prev = chosen
+        prev_pair_group = pair_indices[chosen]
+    
+    return bin_sequence
