@@ -4,6 +4,7 @@ Debug script for stimuli_generation.py
 
 import os
 from numpy.random import randint
+from IPython.display import Image, display
 from psychopy import data
 import stimuli_generation as stimgen
 
@@ -23,11 +24,11 @@ exp_name = "sl-obj-inference"
 psychopy_ver = "2025.1.0"
 
 exp_info = {
-    "subject": "6610", #f"{randint(1000, 9999):04.0f}",  # random 4-digit subject ID
+    "subject": "6210", #f"{randint(1000, 9999):04.0f}",  # random 4-digit subject ID
     "session": "001",
     "exposure": "retrospective",
     "test": "2-step",
-    "date|hid": data.getDateStr(format="%Y%m%d-%H%M"),
+    "date|hid": "2025-0830", #data.getDateStr(format="%Y%m%d-%H%M"),
     "exp_name|hid": exp_name,
     "psychopyVersion|hid": psychopy_ver,
     "file_prefix|hid": "",  # will be set below
@@ -47,7 +48,7 @@ print(f"Subject: {exp_info['subject']}, Session: {exp_info['session']}")
 try:
     unique_stim, linking_stim_by_set = stimgen.load_stimuli("assets")
     abcd_groups = stimgen.generate_pairs(exp_info, unique_stim, linking_stim_by_set)
-    exposure_obj_stream = stimgen.generate_obj_stream(exp_info, abcd_groups)
+    obj_stream_data = stimgen.generate_obj_stream(exp_info, abcd_groups)
     if plotting := True:
         stimgen.plot_stimuli(exp_info, abcd_groups)
 except Exception as e:
@@ -82,4 +83,20 @@ if printing:
             print(f"Pair {i+1} check: A={a_set}, B={b_set}, C={c_set}, D={d_set} \t ❌ ERROR: A or D overlaps with B–C set!")
         else:
             print(f"Pair {i+1} check: A={a_set}, B={b_set}, C={c_set}, D={d_set} \t ✅ OK")
+            
+# obj_stream_data = {
+#     'stream1': {
+#         'trials': stream1_trials,
+#         'pair_indices': stream1_pair_idx_trials,
+#         'oneback_assignments': stream1_1back_df,
+#         'quality_metrics': stream1_1back_df.quality_metrics if stream1_1back_df.success else {}
+#     },
+#     'stream2': {
+#         'trials': stream2_trials,
+#         'pair_indices': stream2_pair_idx_trials,
+#         'oneback_assignments': stream2_1back_df,
+#         'quality_metrics': stream2_1back_df.quality_metrics if stream2_1back_df.success else {}
+#     }
+# }
 
+# check output of generate_obj_stream

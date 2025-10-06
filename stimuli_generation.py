@@ -152,11 +152,256 @@ def plot_stimuli(exp_info, abcd_groups, stim_folder="assets"):
     plt.close()
     
     
+def create_image_trials(abcd_groups, oneback_result, pair_idx_trials, stream_type="AB_CD", label="stream"):
+    """
+    Convert pair index trials and 1-back assignments to actual image trials.
+    
+    Args:
+        abcd_groups: Dictionary with A, B, C, D stimulus assignments
+        oneback_result: OneBackResult object with 1-back assignments
+        pair_idx_trials: List of pair indices for each trial
+        stream_type: Type of stream - "AB_CD" for stream1, "BC" for stream2
+        label: Label for debugging
+        
+    Returns:
+        List of trial dictionaries with images and 1-back indicators
+    """
+    
+    if not oneback_result.success:
+        raise ValueError(f"Cannot create trials from failed 1-back assignment: {oneback_result.error_message}")
+    
+    print(f"\n🎬 Creating image trials for {label} ({stream_type})")
+    print(f"   Input: {len(pair_idx_trials)} pair trials, {len(oneback_result.oneback_array)} 1-back positions")
+    
+    def get_pair_info(pair_idx, stream_type):
+        """Get stimulus pair, labels, and indices for a given pair index."""
+        if stream_type == "AB_CD":
+            # Stream 1: AB pairs (indices 0,1,2,3,4,5) and CD pairs (indices 6,7,8,9,10,11)
+            if pair_idx < len(abcd_groups["A"]):
+                # AB pair - grp_pair_idx is same as pair_idx
+                grp_pair_idx = pair_idx
+                stream_pair_idx = pair_idx  # 0-5
+                a_key = f"A{grp_pair_idx + 1}"
+                b_key = f"B{grp_pair_idx + 1}"
+                first_stim = abcd_groups["A"][a_key]
+                second_stim = abcd_groups["B"][b_key]
+                pair_label = "AB"
+                first_stim_label = "A"
+                second_stim_label = "B"
+            else:
+                # CD pair
+                grp_pair_idx = pair_idx - len(abcd_groups["A"])  # 0-5
+                stream_pair_idx = pair_idx  # 6-11
+                c_key = f"C{grp_pair_idx + 1}"
+                d_key = f"D{grp_pair_idx + 1}"
+                first_stim = abcd_groups["C"][c_key]
+                second_stim = abcd_groups["D"][d_key]
+                pair_label = "CD"
+                first_stim_label = "C"
+                second_stim_label = "D"
+        
+        elif stream_type == "BC":
+            # Stream 2: BC pairs only - grp_pair_idx and stream_pair_idx are the same
+            grp_pair_idx = pair_idx
+            stream_pair_idx = pair_idx  # 0-5
+            b_key = f"B{grp_pair_idx + 1}"
+            c_key = f"C{grp_pair_idx + 1}"
+            first_stim = abcd_groups["B"][b_key]
+            second_stim = abcd_groups["C"][c_key]
+            pair_label = "BC"
+            first_stim_label = "B"
+            second_stim_label = "C"
+        
+        else:
+            raise ValueError(f"Unknown stream_type: {stream_type}")
+        
+        return {
+            'first_stim': first_stim,
+            'second_stim': second_stim,
+            'grp_pair_idx': grp_pair_idx,
+            'stream_pair_idx': stream_pair_idx,
+            'pair_label': pair_label,
+            'first_stim_label': first_stim_label,
+            'second_stim_label': second_stim_label
+        }
+    
+    # Create flattened trial list
+    trials = []
+    trial_idx = 0
+    
+    for pair_trial_idx, pair_idx in enumerate(pair_idx_trials):
+        # Get the stimulus pair info for this trial
+        pair_info = get_pair_info(pair_idx, stream_type)
+        
+        # Check if this pair trial has a 1-back assignment
+        oneback_marker = oneback_result.oneback_array[pair_trial_idx]
+        
+        if oneback_marker == 0:
+            # Normal trial: [first, second]
+            trials.extend([
+                {
+                    'trial_num': trial_idx,
+                    'pair_trial_idx': pair_trial_idx,
+                    'stream_pair_idx': pair_info['stream_pair_idx'],
+                    'grp_pair_idx': pair_info['grp_pair_idx'],
+                    'pair_label': pair_info['pair_label'],
+                    'stim_label': pair_info['first_stim_label'],
+                    'image': pair_info['first_stim'],
+                    'position_in_pair': 0,  # first stimulus
+                    'is_1back': 0,
+                    'oneback_type': None
+                },
+                {
+                    'trial_num': trial_idx + 1,
+                    'pair_trial_idx': pair_trial_idx,
+                    'stream_pair_idx': pair_info['stream_pair_idx'],
+                    'grp_pair_idx': pair_info['grp_pair_idx'],
+                    'pair_label': pair_info['pair_label'],
+                    'stim_label': pair_info['second_stim_label'],
+                    'image': pair_info['second_stim'],
+                    'position_in_pair': 1,  # second stimulus
+                    'is_1back': 0,
+                    'oneback_type': None
+                }
+            ])
+            trial_idx += 2
+            
+        else:
+            # 1-back trial: add extra repetition
+            # oneback_marker indicates which element to repeat: [1,0] = first, [0,1] = second
+            if oneback_marker == [1, 0]:
+                # Repeat first stimulus: [first, first, second]
+                trials.extend([
+                    {
+                        'trial_num': trial_idx,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['first_stim_label'],
+                        'image': pair_info['first_stim'],
+                        'position_in_pair': 0,
+                        'is_1back': 0,
+                        'oneback_type': 'first_repeat'
+                    },
+                    {
+                        'trial_num': trial_idx + 1,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['first_stim_label'],
+                        'image': pair_info['first_stim'],  # repeated
+                        'position_in_pair': 0,
+                        'is_1back': 1,  # this is the 1-back
+                        'oneback_type': 'first_repeat'
+                    },
+                    {
+                        'trial_num': trial_idx + 2,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['second_stim_label'],
+                        'image': pair_info['second_stim'],
+                        'position_in_pair': 1,
+                        'is_1back': 0,
+                        'oneback_type': 'first_repeat'
+                    }
+                ])
+                trial_idx += 3
+                
+            elif oneback_marker == [0, 1]:
+                # Repeat second stimulus: [first, second, second]
+                trials.extend([
+                    {
+                        'trial_num': trial_idx,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['first_stim_label'],
+                        'image': pair_info['first_stim'],
+                        'position_in_pair': 0,
+                        'is_1back': 0,
+                        'oneback_type': 'second_repeat'
+                    },
+                    {
+                        'trial_num': trial_idx + 1,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['second_stim_label'],
+                        'image': pair_info['second_stim'],
+                        'position_in_pair': 1,
+                        'is_1back': 0,
+                        'oneback_type': 'second_repeat'
+                    },
+                    {
+                        'trial_num': trial_idx + 2,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['second_stim_label'],
+                        'image': pair_info['second_stim'],  # repeated
+                        'position_in_pair': 1,
+                        'is_1back': 1,  # this is the 1-back
+                        'oneback_type': 'second_repeat'
+                    }
+                ])
+                trial_idx += 3
+                
+            else:
+                # Unknown marker format - treat as normal trial
+                print(f"⚠️ Unknown 1-back marker format: {oneback_marker}, treating as normal trial")
+                trials.extend([
+                    {
+                        'trial_num': trial_idx,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['first_stim_label'],
+                        'image': pair_info['first_stim'],
+                        'position_in_pair': 0,
+                        'is_1back': 0,
+                        'oneback_type': 'unknown_marker'
+                    },
+                    {
+                        'trial_num': trial_idx + 1,
+                        'pair_trial_idx': pair_trial_idx,
+                        'stream_pair_idx': pair_info['stream_pair_idx'],
+                        'grp_pair_idx': pair_info['grp_pair_idx'],
+                        'pair_label': pair_info['pair_label'],
+                        'stim_label': pair_info['second_stim_label'],
+                        'image': pair_info['second_stim'],
+                        'position_in_pair': 1,
+                        'is_1back': 0,
+                        'oneback_type': 'unknown_marker'  
+                    }
+                ])
+                trial_idx += 2
+    
+    # Calculate summary statistics
+    total_trials = len(trials)
+    oneback_trials = sum(1 for trial in trials if trial['is_1back'] == 1)
+    normal_pair_trials = len([idx for idx, marker in enumerate(oneback_result.oneback_array) if marker == 0])
+    oneback_pair_trials = len([idx for idx, marker in enumerate(oneback_result.oneback_array) if marker != 0])
+    
+    print(f"   Results: {total_trials} individual trials")
+    print(f"   - {normal_pair_trials} normal pairs → {normal_pair_trials * 2} trials")
+    print(f"   - {oneback_pair_trials} 1-back pairs → {oneback_pair_trials * 3} trials")
+    print(f"   - {oneback_trials} trials marked as 1-back repeats")
+    
+    return trials
+
 def generate_obj_stream(exp_info, abcd_groups):
     """
     Generate the object stream for the test phase.
     Returns:
-        obj_stream (list): list of dicts with 'trial_num', 'image', 'is_1back'
+        dict: comprehensive dataset with trials, indices, and quality metrics
     """
     
     # --- Parameters ---
@@ -165,6 +410,7 @@ def generate_obj_stream(exp_info, abcd_groups):
     prob_1back = exp_info["prob_1back|hid"]
     reps = exp_info["num_reps|hid"]
     stim_1back = int(reps * prob_1back * 2)         # number of 1-back trials for a stimulus
+    print(f"Number of 1-back trials per stimulus: {stim_1back}")
     n_pairs_stream1 = num_grps * 2                  # number of groups in the 1st visual stream (A-B and C-D)
     n_pairs_stream2 = num_grps                      # number of groups in the 2nd visual stream (B-C)
     n_pair_trls_stream1 = n_pairs_stream1 * reps    # total number of paired trials in the 1st visual stream
@@ -197,63 +443,421 @@ def generate_obj_stream(exp_info, abcd_groups):
     while not success and attempts < maxAttempts:
         attempts += 1
         try:
-            indices_stream1 = getsequences(n_pairs_stream1, reps, pair_indices_stream1)
-            indices_stream2 = getsequences(n_pairs_stream2, reps, pair_indices_stream2)
-            
-            print(f"indices stream 1 (len={len(indices_stream1)}): {indices_stream1}")
-            print(f"indices stream 2 (len={len(indices_stream2)}): {indices_stream2}")
+            stream1_pair_idx_trials = getsequences(nbvalues=n_pairs_stream1, repeats=reps, pair_indices=pair_indices_stream1, distribution_bins=5)
+            stream2_pair_idx_trials = getsequences(nbvalues=n_pairs_stream2, repeats=reps, pair_indices=pair_indices_stream2, distribution_bins=5)
 
-            list_1back_stream1 = zeroslike(indices_stream1)
-            list_1back_stream2 = zeroslike(indices_stream2)
+            array_1back_stream1 = zeroslike(stream1_pair_idx_trials)
+            array_1back_stream2 = zeroslike(stream2_pair_idx_trials)
 
             group_1back_stream1, group_1back_stream2 = [], []
             exclude_1back_stream1, exclude_1back_stream2 = [], []
             
-            assignOneBacks(n_pairs_stream1, indices_stream1, bins_stream1, exclude_1back_stream1,
-                           list_1back_stream1, group_1back_stream1, "1st visual stream", stim_1back,
-                           pair_idx1, pair_idx2)
-            assignOneBacks(n_pairs_stream2, indices_stream2, bins_stream2, exclude_1back_stream2,
-                           list_1back_stream2, group_1back_stream2, "2nd visual stream", stim_1back,
-                           pair_idx1, pair_idx2)
+            config_stream1 = OneBackConfig(
+                num_pairs=n_pairs_stream1,
+                total_onebacks_per_pair=stim_1back,   # should be = 8
+                temporal_bins=bins_stream1,
+                first_element_marker=pair_idx1,
+                second_element_marker=pair_idx2,
+                label="stream_1"
+            )
+            config_stream2 = OneBackConfig(
+                num_pairs=n_pairs_stream2,
+                total_onebacks_per_pair=stim_1back,   # should be = 8
+                temporal_bins=bins_stream2,
+                first_element_marker=pair_idx1,
+                second_element_marker=pair_idx2,
+                label="stream_2"
+            )
+
+            stream1_1back_df = assign_1backs(config_stream1, stream1_pair_idx_trials, exclude_1back_stream1.copy(), array_1back_stream1.copy())
+            stream2_1back_df = assign_1backs(config_stream2, stream2_pair_idx_trials, exclude_1back_stream2.copy(), array_1back_stream2.copy())
+
+            print(f"\n\nSTREAM 1")
+            validate_1back_assignment(stream1_1back_df, config_stream1)
+            print(f"\n\nSTREAM 2")
+            validate_1back_assignment(stream2_1back_df, config_stream2)
+
             success = True
         except Exception as e:
             print(f"⚠️ Restarting attempt {attempts}: {e}")
     if not success:
-        raise RuntimeError(f"Failed to assign 1-backs after {maxAttempts} attempts")     
+        raise RuntimeError(f"Failed to assign 1-backs after {maxAttempts} attempts")
 
-    exposure_obj_stream = []
+    # Convert to actual image trials with 1-back indicators
+    stream1_trials = create_image_trials(
+        abcd_groups, stream1_1back_df, stream1_pair_idx_trials, 
+        stream_type="AB_CD", label="stream1"
+    )
     
-    return exposure_obj_stream
+    stream2_trials = create_image_trials(
+        abcd_groups, stream2_1back_df, stream2_pair_idx_trials,
+        stream_type="BC", label="stream2"
+    )
 
+    stream1_data = {
+            'trials': stream1_trials,
+            'pair_indices': stream1_pair_idx_trials,
+            'oneback_assignments': stream1_1back_df,
+            'quality_metrics': stream1_1back_df.quality_metrics if stream1_1back_df.success else {}
+    }
+    stream2_data = {
+            'trials': stream2_trials,
+            'pair_indices': stream2_pair_idx_trials,
+            'oneback_assignments': stream2_1back_df,
+            'quality_metrics': stream2_1back_df.quality_metrics if stream2_1back_df.success else {}
+    }
+
+    # concatenate stream1 and stream2 trials into one obj_stream_data dataframe with columns: stream_num, trial_num, pair_trial_idx, stream_pair_idx, grp_pair_idx, pair_label, stim_label, image, position_in_pair, is_1back, oneback_type
+    # stream_pair_idx is the index of the pair in the stream (0-11 for stream1, 0-5 for stream2)
+    # grp_pair_idx is the index of the group pair (0-5 for both streams)
+    # pair_label is the label of the pair (A-B, B-C, C-D, etc.)
+    # stim_label is the label of the stimulus (A, B, C, D)
+    obj_stream_data = {
+        'stream_num': [],
+        'trial_num': [],
+        'pair_trial_idx': [],
+        'stream_pair_idx': [],
+        'grp_pair_idx': [],
+        'pair_label': [],
+        'stim_label': [],
+        'image': [],
+        'position_in_pair': [],
+        'is_1back': [],
+        'oneback_type': []
+    }
+    
+    for trial in stream1_trials:
+        obj_stream_data['stream_num'].append(1)
+        obj_stream_data['trial_num'].append(trial['trial_num'])
+        obj_stream_data['pair_trial_idx'].append(trial['pair_trial_idx'])
+        obj_stream_data['stream_pair_idx'].append(trial['stream_pair_idx'])
+        obj_stream_data['grp_pair_idx'].append(trial['grp_pair_idx'])
+        obj_stream_data['pair_label'].append(trial['pair_label'])
+        obj_stream_data['stim_label'].append(trial['stim_label'])
+        obj_stream_data['image'].append(trial['image'])
+        obj_stream_data['position_in_pair'].append(trial['position_in_pair'])
+        obj_stream_data['is_1back'].append(trial['is_1back'])
+        obj_stream_data['oneback_type'].append(trial['oneback_type'])
+
+    for trial in stream2_trials:
+        obj_stream_data['stream_num'].append(2)
+        obj_stream_data['trial_num'].append(trial['trial_num'])
+        obj_stream_data['pair_trial_idx'].append(trial['pair_trial_idx'])
+        obj_stream_data['stream_pair_idx'].append(trial['stream_pair_idx'])
+        obj_stream_data['grp_pair_idx'].append(trial['grp_pair_idx'])
+        obj_stream_data['pair_label'].append(trial['pair_label'])
+        obj_stream_data['stim_label'].append(trial['stim_label'])
+        obj_stream_data['image'].append(trial['image'])
+        obj_stream_data['position_in_pair'].append(trial['position_in_pair'])
+        obj_stream_data['is_1back'].append(trial['is_1back'])
+        obj_stream_data['oneback_type'].append(trial['oneback_type'])
+
+    # convert to DataFrame
+    obj_stream_data = pd.DataFrame(obj_stream_data)
+    
+    # write to CSV for QA
+    out_dir = "data"
+    os.makedirs(out_dir, exist_ok=True)
+    obj_stream_data.to_csv(os.path.join(out_dir, f"{exp_info['file_prefix']}_exposure-trials.csv"), index=False)
+    
+    return obj_stream_data, stream1_data, stream2_data
 # ============================================================
 # Core 1-Back Assignment Function
 # ============================================================
 
-def assignOneBacks(numPairs, idxByPair, bins, excluded, onebackArray,
-                   onebackPair, label, stimOneback, pairIdx1, pairIdx2):
-    for i in range(numPairs):
-        idxPair = where(idxByPair, lambda val, _: val == i)
-        binCounts = np.random.multinomial(stimOneback, [1/(len(bins)-1)]*(len(bins)-1))
-        onebackIdxs = []
+from dataclasses import dataclass, field
+from typing import List, Tuple, Dict, Any
+from collections import defaultdict
 
-        for j in range(len(bins) - 1):
-            validIdx = negbool(isin(idxPair, excluded))
-            binFiltered = [idx for k, idx in enumerate(idxPair)
-                           if validIdx[k] and bins[j] <= idx < bins[j + 1]]
+@dataclass
+class OneBackConfig:
+    """Configuration for 1-back assignment."""
+    num_pairs: int
+    total_onebacks_per_pair: int
+    temporal_bins: List[int]
+    first_element_marker: Any = field(default_factory=lambda: [1, 0])
+    second_element_marker: Any = field(default_factory=lambda: [0, 1])
+    exclusion_radius: int = 1
+    min_spacing: int = 3
+    label: str = "stream"
+    
+    def __post_init__(self):
+        if self.total_onebacks_per_pair <= 0:
+            raise ValueError(f"total_onebacks_per_pair must be > 0, got {self.total_onebacks_per_pair}")
+        if len(self.temporal_bins) < 2:
+            raise ValueError(f"Need at least 2 temporal bins, got {len(self.temporal_bins)}")
+        if self.num_pairs <= 0:
+            raise ValueError(f"num_pairs must be > 0, got {self.num_pairs}")
 
-            if len(binFiltered) >= binCounts[j]:
-                onebackIdxs.extend(sample(binFiltered, binCounts[j]))
-            else:
-                print(f"⚠️ No valid samples for {label} (pair {i}, bin {j}) — restarting")
-                raise ValueError(f"No valid samples for {label}")
+@dataclass
+class OneBackResult:
+    """Result of 1-back assignment."""
+    oneback_array: List[Any]
+    assignment_order: List[int]
+    excluded_positions: List[int]
+    quality_metrics: Dict[str, Any]
+    success: bool = True
+    error_message: str = ""
 
-        excluded.extend(expandselct(onebackIdxs))
-        onebackIdxsShuff = shuffle(onebackIdxs)
-        onebackPair.extend(onebackIdxsShuff)
+def find_pair_positions(sequence_indices: List[int], pair_id: int) -> List[int]:
+    """Find all positions where a specific pair appears in the sequence."""
+    return [i for i, val in enumerate(sequence_indices) if val == pair_id]
 
-        for k, idx in enumerate(onebackIdxsShuff):
-            onebackArray[idx] = pairIdx1 if k < stimOneback / 2 else pairIdx2
+def distribute_across_bins(total_count: int, num_bins: int, method: str = "multinomial") -> List[int]:
+    """Distribute a total count across bins using specified method."""
+    if method == "multinomial":
+        try:
+            probabilities = [1.0 / num_bins] * num_bins
+            return list(np.random.multinomial(total_count, probabilities))
+        except ValueError:
+            method = "even"  # Fallback to even distribution
+    
+    if method == "even":
+        base_count = total_count // num_bins
+        remainder = total_count % num_bins
+        counts = [base_count] * num_bins
+        for i in range(remainder):
+            counts[i] += 1
+        return counts
+    
+    raise ValueError(f"Unknown distribution method: {method}")
 
+def find_valid_positions_in_bin(pair_positions: List[int], bin_start: int, bin_end: int, 
+                               excluded_positions: set) -> List[int]:
+    """Find valid positions for 1-back assignment within a temporal bin."""
+    valid_positions = []
+    for pos in pair_positions:
+        if (bin_start <= pos < bin_end and 
+            pos not in excluded_positions):
+            valid_positions.append(pos)
+    return valid_positions
+
+def update_exclusion_zones(selected_positions: List[int], exclusion_radius: int, 
+                          sequence_length: int) -> List[int]:
+    """Update exclusion zones around selected positions."""
+    new_exclusions = []
+    for pos in selected_positions:
+        for offset in range(-exclusion_radius, exclusion_radius + 1):
+            neighbor_pos = pos + offset
+            if 0 <= neighbor_pos < sequence_length:
+                new_exclusions.append(neighbor_pos)
+    return new_exclusions
+
+def assign_element_markers(selected_positions: List[int], config: OneBackConfig) -> Dict[int, Any]:
+    """Assign first/second element markers to selected positions."""
+    shuffled_positions = selected_positions.copy()
+    random.shuffle(shuffled_positions)
+    
+    markers = {}
+    half_point = config.total_onebacks_per_pair // 2
+    
+    for i, pos in enumerate(shuffled_positions):
+        if i < half_point:
+            markers[pos] = config.first_element_marker
+        else:
+            markers[pos] = config.second_element_marker
+    
+    return markers, shuffled_positions
+
+def validate_assignment_quality(config: OneBackConfig, oneback_array: List[Any], 
+                              sequence_indices: List[int]) -> Dict[str, Any]:
+    """Validate the quality of 1-back assignments."""
+    metrics = {
+        'total_onebacks': sum(1 for x in oneback_array if x != 0),
+        'pair_distribution': defaultdict(int),
+        'temporal_distribution': {},
+        'spacing_violations': [],
+        'consecutive_violations': 0,
+        'success_rate': 0.0
+    }
+    
+    # Count 1-backs per pair
+    for i, marker in enumerate(oneback_array):
+        if marker != 0:
+            pair_id = sequence_indices[i]
+            metrics['pair_distribution'][pair_id] += 1
+    
+    # Check temporal distribution
+    num_chunks = len(config.temporal_bins) - 1
+    chunk_size = len(oneback_array) // num_chunks if num_chunks > 0 else len(oneback_array)
+    
+    for chunk_idx in range(num_chunks):
+        start_idx = chunk_idx * chunk_size
+        end_idx = min((chunk_idx + 1) * chunk_size, len(oneback_array))
+        chunk_onebacks = sum(1 for i in range(start_idx, end_idx) if oneback_array[i] != 0)
+        metrics['temporal_distribution'][f'chunk_{chunk_idx}'] = chunk_onebacks
+    
+    # Check for consecutive violations
+    for i in range(1, len(oneback_array)):
+        if oneback_array[i] != 0 and oneback_array[i-1] != 0:
+            metrics['consecutive_violations'] += 1
+    
+    # Check spacing violations
+    oneback_positions = [i for i, x in enumerate(oneback_array) if x != 0]
+    for i in range(1, len(oneback_positions)):
+        spacing = oneback_positions[i] - oneback_positions[i-1]
+        if spacing < config.min_spacing:
+            metrics['spacing_violations'].append((oneback_positions[i-1], oneback_positions[i]))
+    
+    # Calculate success rate
+    expected_total = config.num_pairs * config.total_onebacks_per_pair
+    metrics['success_rate'] = metrics['total_onebacks'] / expected_total if expected_total > 0 else 0.0
+    
+    return metrics
+
+
+def validate_1back_assignment(results, config):
+    if results.success:
+        metrics = results.quality_metrics
+
+        print("📊 Quality Metrics Explained:")
+        print(f"   Success Rate: {metrics['success_rate']:.1%}")
+        print("     → Percentage of requested 1-backs successfully assigned")
+        
+        print(f"\n   Total 1-backs: {metrics['total_onebacks']}")
+        print("     → Actual number of 1-back trials created")
+        
+        print(f"\n   Consecutive Violations: {metrics['consecutive_violations']}")
+        print("     → Number of 1-backs that appear back-to-back (bad!)")
+        
+        print(f"\n   Spacing Violations: {len(metrics['spacing_violations'])}")
+        print(f"     → Number of 1-backs closer than {config.min_spacing} positions")
+        
+        print(f"\n   Pair Distribution:")
+        for pair_id, count in metrics['pair_distribution'].items():
+            balance = "✅" if count == config.total_onebacks_per_pair else "⚠️"
+            print(f"     {balance} Pair {pair_id}: {count}/{config.total_onebacks_per_pair}")
+        
+        print(f"\n   Temporal Distribution:")
+        for chunk, count in metrics['temporal_distribution'].items():
+            print(f"     {chunk}: {count} 1-backs")
+        
+        # Overall assessment
+        if (metrics['success_rate'] >= 0.95 and 
+            metrics['consecutive_violations'] == 0 and 
+            len(metrics['spacing_violations']) <= 2):
+            print(f"\n🏆 EXCELLENT QUALITY - Ready for experiment!")
+        elif metrics['success_rate'] >= 0.8:
+            print(f"\n⚠️ ACCEPTABLE QUALITY - Minor issues, but usable")
+        else:
+            print(f"\n❌ POOR QUALITY - Consider adjusting parameters")
+    else:
+        print(f"❌ Assignment failed: {results.error_message}")
+
+def assign_1backs(config: OneBackConfig, sequence_indices: List[int], 
+                          excluded_positions: List[int], 
+                          oneback_array: List[Any] = None) -> OneBackResult:
+    """
+    Improved 1-back assignment with configuration objects and quality validation.
+    
+    Args:
+        config: Configuration object with all assignment parameters
+        sequence_indices: Sequence indicating which pair appears at each position
+        excluded_positions: Positions that cannot be used for 1-backs
+        oneback_array: Array to mark 1-back positions (created if None)
+        
+    Returns:
+        OneBackResult with assignment results and quality metrics
+    """
+    
+    if oneback_array is None:
+        oneback_array = [0] * len(sequence_indices)
+    
+    excluded_set = set(excluded_positions)
+    assignment_order = []
+    all_selected_positions = []
+    
+    print(f"🎯 Starting improved 1-back assignment for {config.label}")
+    print(f"   {config.total_onebacks_per_pair} per pair across {len(config.temporal_bins)-1} bins")
+    
+    try:
+        for pair_id in range(config.num_pairs):
+            # Find positions for this pair
+            pair_positions = find_pair_positions(sequence_indices, pair_id)
+            
+            if not pair_positions:
+                print(f"⚠️ No positions found for pair {pair_id}")
+                continue
+            
+            # Distribute across bins
+            num_bins = len(config.temporal_bins) - 1
+            bin_counts = distribute_across_bins(config.total_onebacks_per_pair, num_bins)
+            
+            pair_selected_positions = []
+            
+            # Process each bin
+            for bin_idx in range(num_bins):
+                required_count = bin_counts[bin_idx]
+                if required_count == 0:
+                    continue
+                
+                bin_start = config.temporal_bins[bin_idx]
+                bin_end = config.temporal_bins[bin_idx + 1]
+                
+                valid_positions = find_valid_positions_in_bin(
+                    pair_positions, bin_start, bin_end, excluded_set
+                )
+                
+                if len(valid_positions) < required_count:
+                    error_msg = (f"Insufficient positions for {config.label}, pair {pair_id}, bin {bin_idx}: "
+                               f"need {required_count}, have {len(valid_positions)}")
+                    return OneBackResult(
+                        oneback_array=oneback_array,
+                        assignment_order=assignment_order,
+                        excluded_positions=list(excluded_set),
+                        quality_metrics={},
+                        success=False,
+                        error_message=error_msg
+                    )
+                
+                # Select positions for this bin
+                bin_selections = sample(valid_positions, required_count)
+                pair_selected_positions.extend(bin_selections)
+                
+                print(f"   Pair {pair_id}, Bin {bin_idx}: {required_count}/{len(valid_positions)} positions")
+            
+            # Update exclusion zones
+            new_exclusions = update_exclusion_zones(
+                pair_selected_positions, config.exclusion_radius, len(sequence_indices)
+            )
+            excluded_set.update(new_exclusions)
+            
+            # Assign markers
+            markers, shuffled_positions = assign_element_markers(pair_selected_positions, config)
+            
+            for pos, marker in markers.items():
+                oneback_array[pos] = marker
+            
+            assignment_order.extend(shuffled_positions)
+            all_selected_positions.extend(pair_selected_positions)
+        
+        # Validate assignment quality
+        quality_metrics = validate_assignment_quality(config, oneback_array, sequence_indices)
+        
+        print(f"✅ Assignment completed successfully!")
+        print(f"   Total 1-backs: {quality_metrics['total_onebacks']}")
+        print(f"   Success rate: {quality_metrics['success_rate']:.1%}")
+        print(f"   Consecutive violations: {quality_metrics['consecutive_violations']}")
+        print(f"   Spacing violations: {len(quality_metrics['spacing_violations'])}")
+        
+        return OneBackResult(
+            oneback_array=oneback_array,
+            assignment_order=assignment_order,
+            excluded_positions=list(excluded_set),
+            quality_metrics=quality_metrics,
+            success=True
+        )
+        
+    except Exception as e:
+        return OneBackResult(
+            oneback_array=oneback_array,
+            assignment_order=assignment_order,
+            excluded_positions=list(excluded_set),
+            quality_metrics={},
+            success=False,
+            error_message=str(e)
+        )
+            
 # ============================================================
 # Helper functions for 1-back logic
 # ============================================================
@@ -342,9 +946,9 @@ def getsequences(nbvalues, repeats, pair_indices, distribution_bins=5):
     print(f"getsequences: nbvalues={nbvalues}, repeats={repeats}, pair_indices={pair_indices}")
     print(f"population: {population}, distribution_bins: {distribution_bins}")
     
-    # If distribution_bins is 1 or not specified properly, use original algorithm
+    # If distribution_bins is 1 or not specified properly, send error
     if distribution_bins <= 1:
-        return _getsequences_original(nbvalues, repeats, pair_indices)
+        raise ValueError("distribution_bins must be greater than 1")
     
     # Create bins for even distribution
     bin_size = total_length // distribution_bins
@@ -370,38 +974,6 @@ def getsequences(nbvalues, repeats, pair_indices, distribution_bins=5):
         all_sequences.extend(bin_sequence)
     
     return all_sequences
-
-def _getsequences_original(nbvalues, repeats, pair_indices):
-    """Original algorithm for fallback"""
-    population = range_list(nbvalues)
-    weights = [repeats] * nbvalues
-    out = []
-    prev = None
-    prev_pair_group = None
-    
-    for _ in range(nbvalues * repeats):
-        temp_weights = weights.copy()
-        if prev is not None:
-            temp_weights[prev] = 0
-            for i, pair_group in enumerate(pair_indices):
-                if pair_group == prev_pair_group:
-                    temp_weights[i] = 0
-        
-        try:
-            chosen = weightedchoice(population, temp_weights)
-        except ValueError as e:
-            if "No weights > 0" in str(e):
-                sendback(prev, weights[prev], out)
-                break
-            else:
-                raise
-        
-        out.append(chosen)
-        weights[chosen] -= 1
-        prev = chosen
-        prev_pair_group = pair_indices[chosen]
-    
-    return out
 
 def _generate_bin_sequence(population, bin_weights, pair_indices, prev_sequences):
     """Generate sequence for a single bin with constraints"""
