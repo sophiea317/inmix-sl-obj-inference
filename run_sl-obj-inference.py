@@ -1,132 +1,172 @@
 # run_sl-obj-inference.py
 #
 # Object Statistical Learning Experiment with Intermixed Exposure and Inference Test
-# ------------------------------------------------------------------------------
-
+# -----------------------------------------------------------------------------------
+# How to run with defaults:
+# python run_sl-obj-inference.py --sub 1234 --test 2-step
+# How to run with all args specified:
+# python run_sl-obj-inference.py --sub 1234 --ses 001 --expo retrospective --test 2-step --debug False --practice True --expoRun True --testRun True
 
 from psychopy import visual, core, event, data, gui, logging
 from psychopy import __version__ as psychopy_ver
 import pandas as pd
 import os
 import numpy as np
-from numpy.random import random, randint, normal, shuffle, choice as randchoice
+import sys
+import argparse
 
-import stimuli_generation as stimgen # custom module
+# Import specific functions from custom modules
+from utils.stimuli_generation import load_stimuli, generate_pairs, plot_stimuli
+from utils.exposure_trials import generate_obj_stream
+from utils.test_trials import generate_all_test_trials
 
 # -----------------------------
-# set debug mode
+# Argument parsing
 # -----------------------------
-DEBUG = False
-practice = False
-if DEBUG:
-    fullscr = False
-    monitor = "debugMonitor"
-    screen = 0
-    win_size = [800, 600]
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    return str(v).lower() in ("yes", "true", "t", "1", "y")
+parser = argparse.ArgumentParser(description="Run Inmix SL Object Inference experiment.")
+# Optional flagged args 
+parser.add_argument("--sub", type=str, default=None, help="Subject number (e.g., 1234)")
+parser.add_argument("--ses", type=str, default="001", help="Session number (e.g., 001)")
+parser.add_argument("--expo", type=str, default="retrospective", help="Exposure type (e.g., retrospective or transitive)")
+parser.add_argument("--test", type=str, default=None, help="Test type (e.g., 1-step or 2-step)")
+parser.add_argument("--debug", type=str2bool, default=False, help="Run in debug mode (True/False)")
+parser.add_argument("--practice", type=str2bool, default=True, help="Run practice phase (True/False)")
+parser.add_argument("--expoRun", type=str2bool, default=True, help="Run exposure phase (True/False)")
+parser.add_argument("--testRun", type=str2bool, default=True, help="Run test phase (True/False)")
+args = parser.parse_args()
+
+# if no args provided, will prompt with dialog
+skip_dialog = all([args.sub is not None, args.test is not None])
+
+# -----------------------------
+# Configuration / constants
+# -----------------------------
+# Phase toggles
+RUN_PRACTICE = args.practice
+RUN_EXPOSURE = args.expoRun
+RUN_TESTS = args.testRun
+
+if args.debug:
+    FULLSCREEN = False
+    MONITOR = "debugMonitor"
+    SCREEN = 0
+    WIN_SIZE = [800, 600]
 else:
-    fullscr = True
-    monitor = "testMonitor"
-    screen = 1
-    win_size = [1920, 1080]
-    
-# ------------------------
-# experiment parameters
-# ------------------------
-data_folder = "data"
-stim_folder = "assets"
-practice_folder = os.path.join(stim_folder, "practice")
+    FULLSCREEN = True
+    MONITOR = "testMonitor"
+    SCREEN = 1
+    WIN_SIZE = [1920, 1080]
+
+# Experiment folders and constants
+exp_folder = os.path.dirname(os.path.abspath(__file__))
+data_folder = os.path.join(exp_folder, "data")
+stim_folder = "stimuli"
+imgs_folder = os.path.join(exp_folder, stim_folder, "images")
+practice_folder = os.path.join(exp_folder, "practice")
+practice_stim_folder = os.path.join(practice_folder, stim_folder, "images")
 num_stim = 24
 num_grps = 6
 num_reps = 40
-prob_1back = 0.1
 
-# parameters for stimulus presentation
-img_dur = 0.5
-isi_dur = 0.5
-fbck_dur = 0.15
-img_size = (300, 300)
-test_l_key = "f"
-test_r_key = "j"
-response_window_ms = 2000  # Response window for 1-back detection (milliseconds)
-
-fix_line = "black"
-fix_fill = "white"
+# Timing + keys
+IMG_DUR = 1.5           # 1500 ms per image in stream
+ISI_DUR = 0.5           # 500 ms between images in stream
+PAUSE_DUR = IMG_DUR*2   # 3000 ms pause between seqs in test
+FBCK_DUR = 0.15         # 150 ms feedback flash on response
+IMG_SIZE = (300, 300)
+EXPO_BIGGER_KEY = "f"
+EXPO_SMALLER_KEY = "j"
+TEST_SEQ1_KEY = "f"
+TEST_SEQ2_KEY = "j"
+FIX_LINE = "white"
+FIX_FILL = "black"
 
 # -----------------------------
-# experiment setup
+# Experiment setup
 # -----------------------------
 exp_name = "inmix-sl-obj-inference"
+default_sub = f"{np.random.randint(1000, 9999):04d}" if args.sub is None else args.sub
 exp_info = {
-    'subject': f"{randint(1000, 9999):04.0f}", 
-    'session': "001",
-    'exposure': ["retrospective","transitive"],
-    'test': ["2-step","1-step"],
+    'subject': default_sub,
+    'session': "001" if args.ses is None else args.ses,
+    'exposure': ["retrospective", "transitive"] if args.expo is None else args.expo,
+    'test': ["2-step", "1-step"] if args.test is None else args.test,
     'date|hid': data.getDateStr(format="%Y%m%d-%H%M"),
     'exp_name|hid': exp_name,
     'psychopyVersion|hid': psychopy_ver,
-    'file_prefix|hid': "",  # will be set below
+    'file_prefix|hid': "",
     'num_stim|hid': num_stim,
     'num_grps|hid': num_grps,
     'num_reps|hid': num_reps,
-    'prob_1back|hid': prob_1back,
-    }
-dlg = gui.DlgFromDict(exp_info, title="Intermixed SL Object Inference") 
-if not dlg.OK:
-    core.quit()
+}
 
-# create data folder if needed
-if not os.path.isdir(data_folder):
-    os.makedirs(data_folder)
+# Show dialog unless CLI args were provided
+if not skip_dialog:
+    dlg = gui.DlgFromDict(exp_info, title="Intermixed SL Object Inference")
+    if not dlg.OK:
+        core.quit()
 
-# define output filename
+# Create data folder if necessary
+os.makedirs(data_folder, exist_ok=True)
+
+# File prefix
 exp_info['file_prefix'] = (
-    f"sub-{exp_info['subject']}_{exp_info['exp_name|hid']}_"
-    f"test-{exp_info['test'].replace('-', '')}_{exp_info['date|hid']}"
+    f"sub-{exp_info['subject']}_{exp_info['exp_name|hid']}_test-{exp_info['test'].replace('-', '')}_{exp_info['date|hid']}"
 )
 
-# setup experiment handler
 this_exp = data.ExperimentHandler(
     name="Inmix-SL-Obj-Inference",
     extraInfo=exp_info,
-    dataFileName=os.path.join(data_folder, exp_info['file_prefix'])
+    dataFileName=os.path.join(data_folder, f"{exp_info['file_prefix']}_raw-data")
 )
 
-# csv files
-practice_exposure_csv = "practice_exposure-trials.csv"
+# CSV paths
 exposure_trials_csv = os.path.join(data_folder, exp_info['file_prefix'] + "_exposure-trials.csv")
 test_trials_csv = os.path.join(data_folder, exp_info['file_prefix'] + "_test-trials.csv")
+rank_file = os.path.join(stim_folder, "stimulus_size-rank.csv")
+practice_exposure_csv = os.path.join(practice_folder, "practice_exposure-trials.csv")
+practice_test_csv = os.path.join(practice_folder, "practice_test-trials.csv")
 
 # ------------------------------
-# initialize stimuli
+# Initialize stimuli
 # ------------------------------
-unique_stim, linking_stim_by_set = stimgen.load_stimuli(stim_folder=stim_folder)
-abcd_groups = stimgen.generate_pairs(exp_info, unique_stim, linking_stim_by_set)
-obj_stream_data = stimgen.generate_obj_stream(exp_info, abcd_groups)
+unique_stim, linking_stim_by_set, rank_dict = load_stimuli(rank_file=rank_file)
+abcd_groups = generate_pairs(exp_info, unique_stim, linking_stim_by_set)
+obj_stream_data = generate_obj_stream(exp_info, abcd_groups, rank_dict)
+test_trials_df = generate_all_test_trials(exp_info, abcd_groups)
 
 # -----------------------------
-# Window setup
+# Window + common stimuli
 # -----------------------------
-win = visual.Window(size=win_size, fullscr=fullscr, screen=screen, monitor=monitor, 
-                    color=[0, 0, 0], colorSpace='rgb', units='pix'
-                    )
+win = visual.Window(
+    size=WIN_SIZE, fullscr=FULLSCREEN, screen=SCREEN, monitor=MONITOR,
+    color=[0, 0, 0], colorSpace='rgb', units='pix'
+)
 
-# window variables
-fixation = visual.Circle(win, radius=5, fillColor=fix_fill, lineColor=fix_line, pos=(0,0))
+# central fixation, instruction text, and response prompt
+fixation = visual.Circle(win, radius=5, fillColor=FIX_FILL, lineColor=FIX_LINE, pos=(0, 0))
 instr_text = visual.TextStim(win, text="", color="white", height=26, wrapWidth=1000)
+response_text_stim = visual.TextStim(win, text="", color="white", height=20, pos=(0, -250))
 
-# Frame rate info for precise timing
+# Frame-rate and logging
 refresh_rate = win.getActualFrameRate()
 if refresh_rate is None:
     refresh_rate = 60.0  # assume 60Hz if can't measure
-print(f"Monitor refresh rate: {refresh_rate:.1f} Hz")
+logging.info(f"Monitor refresh rate: {refresh_rate:.1f} Hz")
 
 # ------------------------
-# Helper Classes and Functions
+# helper class & functions
 # ------------------------
 
 class FixationFlashHandler:
-    """Handles frame-based fixation flashing without blocking."""
-    
+    """Handles frame-based fixation flashing without blocking.
+
+    This instance can be reused across trials by calling set_normal() at trial start.
+    """
     def __init__(self, fixation_stim, normal_fill, normal_line, flash_fill, flash_line, flash_duration_sec, refresh_rate):
         self.fixation = fixation_stim
         self.normal_fill = normal_fill
@@ -134,379 +174,363 @@ class FixationFlashHandler:
         self.flash_fill = flash_fill
         self.flash_line = flash_line
         self.flash_duration_frames = int(flash_duration_sec * refresh_rate)
-        
-        # State variables
-        self.state = "normal"  # "normal", "flashing"
-        self.flash_frame_counter = 0
-        
-        # Set initial state
         self.set_normal()
-    
+
     def set_normal(self):
-        """Set fixation to normal appearance."""
         self.fixation.fillColor = self.normal_fill
         self.fixation.lineColor = self.normal_line
         self.state = "normal"
         self.flash_frame_counter = 0
-    
+
     def start_flash(self):
-        """Start a fixation flash."""
         self.state = "flashing"
         self.flash_frame_counter = 0
         self.fixation.fillColor = self.flash_fill
         self.fixation.lineColor = self.flash_line
-    
+
     def update(self):
-        """Update flash state - call once per frame."""
         if self.state == "flashing":
             self.flash_frame_counter += 1
             if self.flash_frame_counter >= self.flash_duration_frames:
                 self.set_normal()
-    
+
     def is_flashing(self):
-        """Check if currently flashing."""
         return self.state == "flashing"
-def show_instructions(text):
-    """Show instructions."""
+
+# Create one flash handler and reuse it across trials
+_flash_handler = FixationFlashHandler(
+    fixation_stim=fixation,
+    normal_fill=FIX_FILL,
+    normal_line=FIX_LINE,
+    flash_fill=FIX_LINE,  # inverted
+    flash_line=FIX_FILL,
+    flash_duration_sec=FBCK_DUR,
+    refresh_rate=refresh_rate
+)
+
+def show_instructions(text: str) -> None:
+    """Show instructions and wait for keypress."""
     instr_text.text = text
     instr_text.draw()
     win.flip()
     event.waitKeys()
 
-def preload_images(images):
+def preload_images(images, practice=False):
+    """Preload a set of images into a cache of ImageStim objects."""
     cache = {}
-    for img in set(images):
-        path = os.path.join(stim_folder, img)
+    # Filter out NaN values and convert to set
+    unique_images = set(images.dropna())
+    # If images are empty, return empty cache
+    if not unique_images:
+        return cache
+
+    # Check existence once
+    missing = []
+    for img in unique_images:
+        if practice:
+            path = img
+        else:
+            path = os.path.join(imgs_folder, img)
         if not os.path.exists(path):
-            logging.error(f"Missing image: {path}")
-            core.quit()
-        cache[img] = visual.ImageStim(win, image=path, size=img_size)
+            missing.append(path)
+    if missing:
+        logging.error(f"Missing image(s): {missing}")
+        core.quit()
+
+    for img in unique_images:
+        if practice:
+            path = img
+        else:
+            path = os.path.join(imgs_folder, img)
+        cache[img] = visual.ImageStim(win, image=path, size=IMG_SIZE)
     return cache
 
+def get_correct_key(extra_info):
+    """Return correct response key from possible column names."""
+    if not extra_info:
+        return None
+    return extra_info.get("correct_resp") or extra_info.get("correct_ans")
+
 def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None):
-    """Show one image with fixation and log timing + allow multiple responses using frame-based approach."""
+    """Show one image with fixation and log timing; merged stim+ISI loop."""
+    # Ensure the image exists in cache
+    if img_name not in img_cache:
+        logging.error(f"Image {img_name} not found in cache.")
+        core.quit()
     stim = img_cache[img_name]
-    
-    # Initialize flash handler
-    flash_handler = FixationFlashHandler(
-        fixation_stim=fixation,
-        normal_fill=fix_fill,
-        normal_line=fix_line,
-        flash_fill=fix_line,  # inverted colors for flash
-        flash_line=fix_fill,
-        flash_duration_sec=fbck_dur,
-        refresh_rate=refresh_rate
+
+    # Prepare response text 
+    response_text_stim.text = (
+        f"Press '{EXPO_BIGGER_KEY.upper()}' if BIGGER than last object\n"
+        f"Press '{EXPO_SMALLER_KEY.upper()}' if SMALLER than last object"
     )
-    
-    # Initialize timing variables
+
+    # Reset flash handler to normal for this trial
+    _flash_handler.set_normal()
+
     trial_clock = core.Clock()
-    responses = []  # store all keypresses (time + key)
-    
-    # Draw initial frame
+    responses = []
+
+    # Draw initial frame and flip to get onset_time
     stim.draw()
     fixation.draw()
+    response_text_stim.draw()
     onset_time = win.flip()
-    
-    # Main stimulus presentation loop (frame-based)
-    while trial_clock.getTime() < duration:
-        # Check for keypresses
+
+    total_duration = duration + isi
+    # Frame-based loop covering both stimulus presentation and ISI
+    while trial_clock.getTime() < total_duration:
+        t = trial_clock.getTime()
+        in_stim_phase = (t < duration)
+
+        # Collect keys (timestamped relative to trial onset)
         keys = event.getKeys(timeStamped=trial_clock)
-        for k, t in keys:
+        for k, rt in keys:
             if k == "escape":
                 win.close()
                 core.quit()
-            elif k == "space":
-                # Start fixation flash
-                flash_handler.start_flash()
-                # Record keypress
-                responses.append({"key": k, "rt": t})
-        
-        # Update flash state
-        flash_handler.update()
-        
-        # Draw current frame
-        stim.draw()
+            elif k == EXPO_BIGGER_KEY or k == EXPO_SMALLER_KEY:
+                _flash_handler.start_flash()
+                responses.append({"key": k, "rt": rt})
+
+        # Update flash handler (frame bookkeeping)
+        _flash_handler.update()
+
+        # Draw appropriate content
+        if in_stim_phase:
+            stim.draw()
+        # else: ISI -> only fixation
         fixation.draw()
+        response_text_stim.draw()
         win.flip()
-    
-    # ISI period (frame-based)
-    isi_clock = core.Clock()
-    
-    while isi_clock.getTime() < isi:
-        # Continue checking for keypresses during ISI
-        keys = event.getKeys(timeStamped=trial_clock)  # Note: still using trial_clock for RT relative to trial onset
-        for k, t in keys:
-            if k == "escape":
-                win.close()
-                core.quit()
-            elif k == "space":
-                # Start fixation flash during ISI
-                flash_handler.start_flash()
-                # Record keypress
-                responses.append({"key": k, "rt": t})
-        
-        # Update flash state
-        flash_handler.update()
-        
-        # Draw ISI frame (fixation only)
-        fixation.draw()
-        win.flip()
-    
-    # Create trial record
+
+    # Post-trial record creation
     record = {
         "trial_num": trial_num,
         "image": img_name,
         "onset_time": onset_time,
         "duration": duration,
-        "responses": responses,  # list of all keypresses this trial
+        "responses": responses,
     }
-    
     if extra_info:
         record.update(extra_info)
-    
-    # For convenience, compute quick response summary
+
+    # Compute response summary
     if responses:
         record["num_responses"] = len(responses)
         record["first_rt"] = responses[0]["rt"]
         record["last_rt"] = responses[-1]["rt"]
-        record["mean_rt"] = np.mean([r["rt"] for r in responses])
+        record["last_key"] = responses[-1]["key"]
+        record["mean_rt"] = float(np.mean([r["rt"] for r in responses]))
+        correct_key = get_correct_key(extra_info)
+        if correct_key and correct_key != "none":
+            record["acc"] = int(responses and responses[-1]["key"] == correct_key)
+            record["rt"] = responses[-1]["rt"] if responses else None
+        else:
+            record["acc"] = None
+            record["rt"] = None
     else:
         record["num_responses"] = 0
         record["first_rt"] = None
         record["last_rt"] = None
+        record["last_key"] = None
         record["mean_rt"] = None
-    
+        correct_key = get_correct_key(extra_info)
+        if correct_key and correct_key != "none":
+            record["acc"] = 0
+        else:
+            record["acc"] = None
+        record["rt"] = None
+
     return record
 
+def calculate_accuracy(trial_data):
+    """Calculate accuracy from trial data."""
+    if isinstance(trial_data, list):
+        trial_data = pd.DataFrame(trial_data)
 
-def calculate_1back_accuracy(trial_data, response_window_ms=2000):
-    """Calculate 1-back detection accuracy with proper post-onset response window."""
-    if not trial_data:
-        return 0.0, 0, 0, "No trials found"
-    
-    df = pd.DataFrame(trial_data)
-    
-    # Check if we have the required columns
-    if 'is_1back' not in df.columns:
-        return 0.0, 0, 0, "Missing 'is_1back' column in data"
-    
-    # Convert response window to seconds
-    response_window_sec = response_window_ms / 1000.0
-    
-    # Sort trials by trial number to process in sequence
-    df_sorted = df.sort_values('trial_num').reset_index(drop=True)
-    
-    n_oneback_trials = len(df_sorted[df_sorted['is_1back'] == 1])
-    n_normal_trials = len(df_sorted[df_sorted['is_1back'] == 0])
-    
-    if n_oneback_trials == 0:
-        return 0.0, 0, 0, "No 1-back trials found"
-    
-    # Track which 1-back trials have been detected
-    oneback_detected = set()
-    false_alarms = []
-    late_responses = 0
-    
-    # Get trial duration for timing calculations
-    trial_duration = img_dur + isi_dur
-    
-    # Process each trial and look for valid responses to 1-back trials
-    for i, trial in df_sorted.iterrows():
-        if trial['is_1back'] == 1:  # This is a 1-back trial
-            # Look for responses from this trial and subsequent trials within the response window
-            trial_detected = False
-            
-            # Check responses during the 1-back trial itself
-            if trial['num_responses'] > 0 and trial['responses']:
-                for resp in trial['responses']:
-                    # Response must be after trial onset (rt > 0) and within window
-                    if 0 < resp['rt'] <= response_window_sec:
-                        trial_detected = True
-                        break
-            
-            # Check responses in subsequent trials within the response window
-            if not trial_detected:
-                for j in range(i + 1, len(df_sorted)):
-                    later_trial = df_sorted.iloc[j]
-                    if later_trial['num_responses'] > 0 and later_trial['responses']:
-                        # Calculate when this later trial started relative to the 1-back trial
-                        trials_later = j - i
-                        later_trial_start_time = trials_later * trial_duration
-                        
-                        # If this later trial started after our response window, stop looking
-                        if later_trial_start_time > response_window_sec:
-                            break
-                            
-                        # Check each response in the later trial
-                        for resp in later_trial['responses']:
-                            # Time from 1-back onset to this response
-                            response_time_from_oneback = later_trial_start_time + resp['rt']
-                            
-                            # Valid if within response window after 1-back onset
-                            if 0 < response_time_from_oneback <= response_window_sec:
-                                trial_detected = True
-                                break
-                        
-                        if trial_detected:
-                            break
-            
-            if trial_detected:
-                oneback_detected.add(i)
-    
-    # Now identify false alarms - responses that weren't attributed to any 1-back
-    for i, trial in df_sorted.iterrows():
-        if trial['num_responses'] > 0 and trial['responses']:
-            for resp in trial['responses']:
-                response_attributed = False
-                
-                if trial['is_1back'] == 1:
-                    # Response during 1-back trial
-                    if 0 < resp['rt'] <= response_window_sec and i in oneback_detected:
-                        response_attributed = True
-                    elif resp['rt'] > response_window_sec:
-                        # Late response on 1-back trial
-                        late_responses += 1
-                        continue
-                else:
-                    # Response during normal trial - check if it can be attributed to a previous 1-back
-                    for j in range(max(0, i-10), i):  # Look back at recent trials
-                        prev_trial = df_sorted.iloc[j]
-                        if prev_trial['is_1back'] == 1:
-                            # Calculate time from previous 1-back onset to this response
-                            trials_later = i - j
-                            current_trial_start_time = trials_later * trial_duration
-                            response_time_from_oneback = current_trial_start_time + resp['rt']
-                            
-                            # Check if this response is within the window for that 1-back
-                            if 0 < response_time_from_oneback <= response_window_sec and j in oneback_detected:
-                                response_attributed = True
-                                break
-                
-                # If response wasn't attributed to any 1-back, it's a false alarm
-                if not response_attributed:
-                    false_alarms.append((i, resp['rt']))
-    
-    # Calculate final metrics
-    hits = len(oneback_detected)
-    missed_onebacks = n_oneback_trials - hits
-    false_alarms_count = len(false_alarms) + late_responses
-    
-    # Calculate accuracy
-    correct_detections = hits
-    correct_rejections = n_normal_trials - len([fa for fa in false_alarms if df_sorted.iloc[fa[0]]['is_1back'] == 0])
-    total_trials = n_oneback_trials + n_normal_trials
-    accuracy = (correct_detections + correct_rejections) / total_trials
-    
-    # Calculate rates
-    hit_rate = hits / n_oneback_trials if n_oneback_trials > 0 else 0
-    fa_rate = false_alarms_count / (n_normal_trials + n_oneback_trials) if (n_normal_trials + n_oneback_trials) > 0 else 0
-    
-    summary = (f"Hits: {hits}/{n_oneback_trials} ({hit_rate:.1%}), "
-              f"Misses: {missed_onebacks}, Late: {late_responses}, "
-              f"FA: {false_alarms_count} ({fa_rate:.1%})")
-    
-    return accuracy, hits, false_alarms_count, summary
+    if 'acc' not in trial_data.columns:
+        return np.nan, "Accuracy: N/A (no 'acc' column)"
+
+    valid_acc = trial_data['acc'].dropna()
+    accuracy = valid_acc.mean() if not valid_acc.empty else np.nan
+    missed = int(trial_data['last_key'].isna().sum()) if 'last_key' in trial_data.columns else 0
+    total = len(trial_data)
+    valid_trials = len(valid_acc)
+    summary = (f"Accuracy: {accuracy:.1%} ({valid_trials} trials), Missed: {missed}/{total}")
+    return accuracy, summary
 
 def run_stream(csv_path, label="stream"):
     """Run a continuous stream of images defined in a CSV."""
     if not os.path.exists(csv_path):
-        print(f"Warning: {csv_path} not found, skipping {label}.")
+        logging.warning(f"{csv_path} not found, skipping {label}.")
         return []
     df = pd.read_csv(csv_path)
     if "image" not in df.columns:
-        print(f"Error: {csv_path} must contain an 'image' column.")
+        logging.error(f"{csv_path} must contain an 'image' column.")
         core.quit()
-    cache = preload_images(df["image"])
+
+    practice_flag = (csv_path == practice_exposure_csv)
+    print(df["image"].head())
+    print(df["image"].isna().sum(), "missing image entries")
+    cache = preload_images(df["image"], practice=practice_flag)
+
     records = []
-    for i, row in df.iterrows():
+    for i, (_, row) in enumerate(df.iterrows()):
         img_name = row["image"]
+        # Skip rows with missing image names
+        if pd.isna(img_name):
+            continue
         extra = {c: row[c] for c in df.columns if c != "image"}
-        record = present_trial(img_name, cache, img_dur, isi_dur, i+1, extra)
+        record = present_trial(img_name, cache, IMG_DUR, ISI_DUR, i + 1, extra)
         record["phase"] = label
         records.append(record)
     return records
 
-
 def run_test():
-    """Optional 2AFC test phase."""
+    """Sequential test phase mimicking exposure presentation."""
     if not os.path.exists(test_trials_csv):
-        print("No test phase found. Skipping.")
+        logging.info("No test phase found. Skipping.")
         return []
     df = pd.read_csv(test_trials_csv)
-    if not {"left", "right", "correct_side"}.issubset(df.columns):
-        print("test_pairs.csv must have 'left','right','correct_side' columns.")
+
+    # Required columns check
+    required_cols = {"seq1_stim1", "seq1_stim2", "seq2_stim1", "seq2_stim2", "correct_seq"}
+    if not required_cols.issubset(df.columns):
+        logging.error(f"test_trials.csv must have columns: {required_cols}. Found: {list(df.columns)}")
         core.quit()
 
-    # Preload images
-    all_imgs = pd.unique(df[["left","right"]].values.ravel())
+    # Gather unique images for preloading
+    image_cols = ["seq1_stim1", "seq1_stim2", "seq2_stim1", "seq2_stim2"]
+    all_imgs = set()
+    for col in image_cols:
+        all_imgs.update(df[col].unique())
     cache = preload_images(all_imgs)
+
     results = []
 
-    show_instructions(f"Test phase:\n\nPress '{test_l_key.upper()}' for LEFT\nPress '{test_r_key.upper()}' for RIGHT\n\nPress any key to begin.")
+    # Show test instructions
+    test_type_str = df['test_type'].iloc[0] if 'test_type' in df.columns else "unknown"
+    show_instructions(
+        f"Test Phase: {test_type_str}\n\nYou will see two sequences of image pairs.\nChoose which sequence went together during learning.\n\n"
+        f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\nPress '{TEST_SEQ2_KEY.upper()}' for SECOND sequence\n\nPress any key to begin."
+    )
 
-    left_stim = visual.ImageStim(win, size=img_size, pos=(-300,0))
-    right_stim = visual.ImageStim(win, size=img_size, pos=(300,0))
-
+    # For each test row, present sequence 1, pause, sequence 2, then collect response
     for t, row in df.iterrows():
-        left_stim.image = os.path.join(stim_folder, row["left"])
-        right_stim.image = os.path.join(stim_folder, row["right"])
-        left_stim.draw()
-        right_stim.draw()
+        # Sequence 1: first image
+        cache[row["seq1_stim1"]].draw()
+        fixation.draw()
+        win.flip()
+        core.wait(IMG_DUR)
+
+        # ISI
+        fixation.draw()
+        win.flip()
+        core.wait(ISI_DUR)
+
+        # Sequence 1: second image
+        cache[row["seq1_stim2"]].draw()
+        fixation.draw()
+        win.flip()
+        core.wait(IMG_DUR)
+
+        # Pause between sequences
+        fixation.draw()
+        win.flip()
+        core.wait(PAUSE_DUR)
+
+        # Sequence 2: first image
+        cache[row["seq2_stim1"]].draw()
+        fixation.draw()
+        win.flip()
+        core.wait(IMG_DUR)
+
+        # ISI
+        fixation.draw()
+        win.flip()
+        core.wait(ISI_DUR)
+
+        # Sequence 2: second image
+        cache[row["seq2_stim2"]].draw()
+        fixation.draw()
+        win.flip()
+        core.wait(IMG_DUR)
+
+        # Response prompt
+        response_prompt = (
+            f"Which sequence went together?\n\nPress '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
+            f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence"
+        )
+        response_text = visual.TextStim(win, text=response_prompt, color="white", height=30, pos=(0, 0))
+        response_text.draw()
         fixation.draw()
         win.flip()
 
         timer = core.Clock()
-        key, rt = event.waitKeys(keyList=[test_l_key, test_r_key, "escape"], timeStamped=timer)[0]
+        key, rt = event.waitKeys(keyList=[TEST_SEQ1_KEY, TEST_SEQ2_KEY, "escape"], timeStamped=timer)[0]
         if key == "escape":
             win.close()
             core.quit()
-        choice = "left" if key == test_l_key else "right"
-        correct = int(choice == row["correct_side"])
-        results.append({
-            "trial_num": t+1,
-            "left": row["left"],
-            "right": row["right"],
-            "correct_side": row["correct_side"],
+
+        choice = "sequence1" if key == TEST_SEQ1_KEY else "sequence2"
+        correct = int(choice == row["correct_seq"])
+
+        result = {
+            "trial_num": t + 1,
+            "pair_type": row.get("pair_type", "unknown"),
+            "test_type": row.get("test_type", "unknown"),
+            "block": row.get("block", "unknown"),
+            "seq1_stim1": row["seq1_stim1"],
+            "seq1_stim2": row["seq1_stim2"],
+            "seq2_stim1": row["seq2_stim1"],
+            "seq2_stim2": row["seq2_stim2"],
+            "correct_seq": row["correct_seq"],
             "choice": choice,
             "accuracy": correct,
             "rt": rt
-        })
+        }
+        results.append(result)
 
-        # Feedback
+        # Feedback flash
         fb_color = "green" if correct else "red"
         fb = visual.TextStim(win, text="Correct" if correct else "Incorrect", color=fb_color, height=40)
         fb.draw()
         fixation.draw()
         win.flip()
         core.wait(0.5)
+
     return results
 
 # ------------------------
 # Experiment Flow
 # ------------------------
-if practice:
+all_practice_data = []
+accuracy = 0.0
+summary = ""
+practice_attempt = 0
+
+if RUN_PRACTICE:
     show_instructions(
-        "Welcome!\n\nYou will see a sequence of images.\nKeep your eyes on the central dot at all times.\n\nPress SPACE whenever you see an image repeat.\n\nYou must achieve 100% accuracy on practice trials to continue.\n\nPress any key to begin practice."
+        "Welcome!\n\nYou will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
+        "All objects are shown at the same size on the screen. Base your answer on their real-life size.\n\n"
+        "Press 'F' if the current object is bigger than the previous one.\nPress 'J' if the current object is smaller than the previous one.\n\n"
+        "You must achieve 100% accuracy on practice trials to continue.\n\nPress any key to begin practice."
     )
 
-    # Practice loop - require 100% accuracy
     practice_attempt = 1
-    max_practice_attempts = 10  # Prevent infinite loops
+    max_practice_attempts = 20
     all_practice_data = []
 
     while practice_attempt <= max_practice_attempts:
-        print(f"Practice attempt {practice_attempt}")
-        
-        # Run practice trials
+        logging.info(f"Practice attempt {practice_attempt}")
         practice_data = run_stream(practice_exposure_csv, label=f"practice_attempt_{practice_attempt}")
         all_practice_data.extend(practice_data)
-        
-        # Calculate accuracy
-        accuracy, hits, false_alarms, summary = calculate_1back_accuracy(practice_data, response_window_ms)
-        
-        print(f"Practice accuracy: {accuracy:.1%} - {summary}")
-        
-        if accuracy >= 1.0:  # 100% accuracy required
+
+        accuracy, summary = calculate_accuracy(practice_data)
+        logging.info(f"Practice accuracy: {accuracy:.1%} - {summary}")
+
+        if accuracy == 1.0:
             show_instructions(
                 f"Excellent! You achieved 100% accuracy!\n\n{summary}\n\nYou're ready for the main experiment.\n\nPress any key to continue."
             )
@@ -518,43 +542,46 @@ if practice:
                 )
             else:
                 show_instructions(
-                    f"Practice accuracy: {accuracy:.1%}\nYou need 100% accuracy to continue.\nLet's try the practice again.\n\nRemember:\n- Press SPACE only AFTER you see an image repeat\n\nPress any key to retry."
+                    f"Practice accuracy: {accuracy:.1%}\nYou need 100% accuracy to continue.\nLet's try the practice again.\n\nRemember:\n- Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n- Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\nPress any key to retry."
                 )
             practice_attempt += 1
 
     show_instructions(
-        "Now the real experiment will begin.\nAgain, keep your eyes on the central dot.\n\nPress SPACE whenever an image repeats.\n\nPress any key to start."
+        f"Now the real experiment will begin.\n\nPress '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\nPress '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\nPress any key to start."
     )
-else: 
-    show_instructions(
-        "Welcome to the experiment!\n\nYou will see a sequence of images.\nKeep your eyes on the central dot at all times.\n\nPress SPACE whenever you see an image repeat.\n\nPress any key to begin."
-    )
+else:
+    if RUN_EXPOSURE:
+        show_instructions(
+            f"Welcome to the experiment!\n\nYou will see a sequence of images.\n\nPress '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\nPress '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\nPress any key to begin."
+        )
 
-main_data = run_stream(exposure_trials_csv, label="exposure")
+# Initialize data lists
+main_data = []
+test_data = []
 
-# Optional test
-test_data = run_test()
+if RUN_EXPOSURE:
+    main_data = run_stream(exposure_trials_csv, label="exposure")
+
+if RUN_TESTS:
+    test_data = run_test()
 
 # ------------------------
-# Save Data
+# Save Data 
 # ------------------------
 all_data = all_practice_data + main_data
 df_all = pd.DataFrame(all_data)
 test_df = pd.DataFrame(test_data)
 
-# Also save practice performance summary
 practice_summary = {
     'subject': exp_info['subject'],
     'total_practice_attempts': practice_attempt,
     'achieved_100_percent': accuracy >= 1.0,
     'final_accuracy': accuracy,
-    'final_hits': hits,
-    'final_false_alarms': false_alarms,
     'summary': summary
 }
 practice_summary_df = pd.DataFrame([practice_summary])
-practice_summary_df.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_practice-summary.csv"), index=False)
 
+practice_summary_df.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_practice-summary.csv"), index=False)
 df_all.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_exposure-data.csv"), index=False)
 if len(test_data) > 0:
     test_df.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_test-data.csv"), index=False)
