@@ -55,11 +55,15 @@ if args.debug:
     MONITOR = "debugMonitor"
     SCREEN = 0
     WIN_SIZE = [800, 600]
+    bug = 0.25
 else:
     FULLSCREEN = True
     MONITOR = "testMonitor"
     SCREEN = 1
     WIN_SIZE = [1920, 1080]
+    bug = 1
+    
+
 
 # Experiment folders and constants
 exp_folder = os.path.dirname(os.path.abspath(__file__))
@@ -73,11 +77,13 @@ num_grps = 6
 num_reps = 40
 
 # Timing + keys
-IMG_DUR = 1.5           # 1500 ms per image in stream
-ISI_DUR = 0.5           # 500 ms between images in stream
-PAUSE_DUR = IMG_DUR*2   # 3000 ms pause between seqs in test
-FBCK_DUR = 0.15         # 150 ms feedback flash on response
-IMG_SIZE = (300, 300)
+IMG_DUR = .1 #1.0*bug                       # 1000 ms per image in stream
+ISI_DUR = .05 #0.5*bug                       # 500 ms between images in stream
+PAUSE_DUR = ((IMG_DUR+ISI_DUR)*2)*bug     # 2500 ms pause between seqs in test
+FBCK_DUR = 0.15*bug                     # 150 ms feedback flash on response
+RES = 400*bug                           # image size in pixels on screen
+BREAK_DUR = 15                          # seconds for break countdown
+IMG_SIZE = (RES, RES)
 EXPO_BIGGER_KEY = "f"
 EXPO_SMALLER_KEY = "j"
 TEST_SEQ1_KEY = "f"
@@ -148,9 +154,9 @@ win = visual.Window(
 )
 
 # central fixation, instruction text, and response prompt
-fixation = visual.Circle(win, radius=5, fillColor=FIX_FILL, lineColor=FIX_LINE, pos=(0, 0))
-instr_text = visual.TextStim(win, text="", color="white", height=26, wrapWidth=1000)
-response_text_stim = visual.TextStim(win, text="", color="white", height=20, pos=(0, -250))
+fixation = visual.Circle(win, radius=5*bug, fillColor=FIX_FILL, lineColor=FIX_LINE, pos=(0, 0))
+instr_text = visual.TextStim(win, text="", color="white", height=26, wrapWidth=1000*bug)
+response_text_stim = visual.TextStim(win, text="", color="white", height=20, pos=(0, -250*bug))
 
 # Frame-rate and logging
 refresh_rate = win.getActualFrameRate()
@@ -251,6 +257,45 @@ def get_correct_key(extra_info):
         return None
     return extra_info.get("correct_resp") or extra_info.get("correct_ans")
 
+def break_trial():
+    """Present a break screen that counts down from BREAK_DUR seconds or until keypress."""
+    start_time = core.getTime()
+    last_update_time = start_time
+    
+    # Initial display
+    remaining = BREAK_DUR
+    instr_text.text = f"Take a short break!\n\nTime remaining: {remaining} seconds...\n\nPress any key to continue to the experiment.\nOtherwise, the experiment will start again immediately after the countdown."
+    instr_text.draw()
+    win.flip()
+    
+    # update text each second (NOT frame-based)
+    while True:
+        current_time = core.getTime()
+        elapsed = current_time - start_time
+        
+        # Update display every second
+        if current_time - last_update_time >= 1.0:
+            remaining = max(0, BREAK_DUR - int(elapsed))
+            instr_text.text = f"Take a short break!\n\nTime remaining: {remaining} seconds...\n\nPress any key to continue to the experiment.\nOtherwise, the experiment will start again immediately after the countdown."
+            instr_text.draw()
+            win.flip()
+            last_update_time = current_time
+        
+        keys = event.getKeys()
+        if keys:
+            rt = elapsed
+            break
+        if elapsed >= BREAK_DUR:
+            rt = elapsed
+            break
+    
+    record = {
+        "rt": rt
+    }
+    return record  # return time spent on break, in case needed for logging
+    
+# Otherwise, the task will start again immediately after the countdown.
+
 def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None):
     """Show one image with fixation and log timing; merged stim+ISI loop."""
     # Ensure the image exists in cache
@@ -261,9 +306,12 @@ def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None
 
     # Prepare response text 
     response_text_stim.text = (
-        f"Press '{EXPO_BIGGER_KEY.upper()}' if BIGGER than last object\n"
-        f"Press '{EXPO_SMALLER_KEY.upper()}' if SMALLER than last object"
+        f"{EXPO_BIGGER_KEY.upper()} if BIGGER than last object\n"
+        f"{EXPO_SMALLER_KEY.upper()} if SMALLER than last object"
     )
+    
+    if args.debug:
+        response_text_stim.text += f"\n[DEBUG MODE: Trial {trial_num}]"
 
     # Reset flash handler to normal for this trial
     _flash_handler.set_normal()
@@ -371,19 +419,19 @@ def run_stream(csv_path, label="stream"):
         core.quit()
 
     practice_flag = (csv_path == practice_exposure_csv)
-    print(df["image"].head())
-    print(df["image"].isna().sum(), "missing image entries")
     cache = preload_images(df["image"], practice=practice_flag)
 
     records = []
     for i, (_, row) in enumerate(df.iterrows()):
         img_name = row["image"]
-        # Skip rows with missing image names
-        if pd.isna(img_name):
-            continue
+        trial_task = row["task"]
         extra = {c: row[c] for c in df.columns if c != "image"}
-        record = present_trial(img_name, cache, IMG_DUR, ISI_DUR, i + 1, extra)
-        record["phase"] = label
+        if trial_task == "break":      
+            record = break_trial()
+            record["phase"] = "break"
+        else:
+            record = present_trial(img_name, cache, IMG_DUR, ISI_DUR, i + 1, extra)
+            record["phase"] = label
         records.append(record)
     return records
 
@@ -512,10 +560,13 @@ practice_attempt = 0
 
 if RUN_PRACTICE:
     show_instructions(
-        "Welcome!\n\nYou will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
+        "Welcome!\n\n"
+        "You will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
         "All objects are shown at the same size on the screen. Base your answer on their real-life size.\n\n"
-        "Press 'F' if the current object is bigger than the previous one.\nPress 'J' if the current object is smaller than the previous one.\n\n"
-        "You must achieve 100% accuracy on practice trials to continue.\n\nPress any key to begin practice."
+        "Press 'F' if the current object is bigger than the previous one.\n"
+        "Press 'J' if the current object is smaller than the previous one.\n\n"
+        "You must achieve 100% accuracy on practice trials to continue.\n\n"
+        "Press any key to begin practice."
     )
 
     practice_attempt = 1
@@ -532,27 +583,46 @@ if RUN_PRACTICE:
 
         if accuracy == 1.0:
             show_instructions(
-                f"Excellent! You achieved 100% accuracy!\n\n{summary}\n\nYou're ready for the main experiment.\n\nPress any key to continue."
+                f"Excellent! You achieved 100% accuracy!\n\n"
+                f"{summary}\n\n"
+                f"You're ready for the main experiment.\n\n"
+                f"Press any key to continue."
             )
             break
         else:
             if practice_attempt >= max_practice_attempts:
                 show_instructions(
-                    f"Practice complete after {max_practice_attempts} attempts.\n\nResponse accuracy: {accuracy:.1%}\n\nYou will now proceed to the main experiment.\n\nPress any key to continue."
+                    f"Practice complete after {max_practice_attempts} attempts.\n\n"
+                    f"Response accuracy: {accuracy:.1%}\n\n"
+                    f"You will now proceed to the main experiment.\n\n"
+                    f"Press any key to continue."
                 )
             else:
                 show_instructions(
-                    f"Practice accuracy: {accuracy:.1%}\nYou need 100% accuracy to continue.\nLet's try the practice again.\n\nRemember:\n- Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n- Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\nPress any key to retry."
+                    f"Practice accuracy: {accuracy:.1%}\n"
+                    f"You need 100% accuracy to continue.\n"
+                    f"Let's try the practice again.\n\n"
+                    f"Remember:\n"
+                    f"- Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
+                    f"- Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
+                    f"Press any key to retry."
                 )
             practice_attempt += 1
 
     show_instructions(
-        f"Now the real experiment will begin.\n\nPress '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\nPress '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\nPress any key to start."
+        f"Now the real experiment will begin.\n\n"
+        f"Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
+        f"Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
+        f"Press any key to start."
     )
 else:
     if RUN_EXPOSURE:
         show_instructions(
-            f"Welcome to the experiment!\n\nYou will see a sequence of images.\n\nPress '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\nPress '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\nPress any key to begin."
+            f"Welcome to the experiment!\n\n"
+            f"You will see a sequence of images.\n\n"
+            f"Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
+            f"Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
+            f"Press any key to begin."
         )
 
 # Initialize data lists

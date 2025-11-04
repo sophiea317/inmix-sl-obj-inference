@@ -47,107 +47,92 @@ def generate_pairs(exp_info, unique_stim, linking_stim_by_set):
     # Seed random generator per subject for reproducibility
     np.random.seed(int(exp_info["subject"]))
     random.seed(int(exp_info["subject"]))
+    
+    # even subjects: pair-cb1 (counterbalance 1), odd subjects: pair-cb2 (counterbalance 2)
+    cb_num = 1 if int(exp_info["subject"]) % 2 == 0 else 2
+    
+    # exclude stimuli not for subject's counterbalance
+    # e.g., for set 1 (set-01_pair-cb1.jpg, set-01_pair-cb2.jpg, set-01_pair-lap.jpg), if cb_num=1, exclude pair-cb2
+    def filter_stimuli(stim_list, cb_num):
+        filtered = []
+        for stim in stim_list:
+            if f"pair-cb{cb_num}" in stim or "pair-lap" in stim:
+                filtered.append(stim)
+        return filtered
 
+    # apply filtering
+    for set_id, stim_list in linking_stim_by_set.items():
+        linking_stim_by_set[set_id] = filter_stimuli(stim_list, cb_num)
+
+    print(f"Filtered linking stimuli for counterbalance {cb_num}: {linking_stim_by_set}")
+    # --- Generate B-C pairs ---
     b_stim, c_stim = {}, {}
     pair_counter = 0
 
-    # --- Generate B-C pairs ---
     for set_id, imgs in linking_stim_by_set.items():
-        # first BC pair: img-02 + random(img-01/img-03)
-        first_item = imgs[1]  # img-02
-        second_item = np.random.choice([imgs[0], imgs[2]])
+        # BC pair: pair-lap + pair-cb[cb_num]
+        item_1 = imgs[1] # pair-lap
+        item_2 = imgs[0] # pair-cb[cb_num]
+        
         if np.random.randint(0, 2) == 0:
-            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = first_item, second_item
+            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = item_1, item_2
         else:
-            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = second_item, first_item
+            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = item_2, item_1
         pair_counter += 1
-
-        # second BC pair: img-04 + (img-03/img-05)
-        first_item = imgs[3]  # img-04
-        if imgs[2] not in c_stim.values() and imgs[2] not in b_stim.values():
-            second_item = np.random.choice([imgs[2], imgs[4]])
-        else:
-            second_item = imgs[4]
-        if np.random.randint(0, 2) == 0:
-            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = first_item, second_item
-        else:
-            b_stim[f"B{pair_counter+1}"], c_stim[f"C{pair_counter+1}"] = second_item, first_item
-        pair_counter += 1
-
-    # collect unused
-    used_imgs = list(b_stim.values()) + list(c_stim.values())
-    unused_imgs = [img for imgs in linking_stim_by_set.values() for img in imgs if img not in used_imgs]
-    remaining_stim = unique_stim + unused_imgs
-
+        
     # --- Generate A and D stimuli ---
     a_stim, d_stim, rank_num = {}, {}, {}
-    used_sets = set()
     bc_pairs = list(zip(b_stim.values(), c_stim.values()))
-    ad_stim_choices = remaining_stim.copy()
-
+    ad_stim_choices = unique_stim.copy()
+    
     for i, (b_img, c_img) in enumerate(bc_pairs):
-        while True:
-            # if no more valid candidates, restart all A/D assignments
-            if len(ad_stim_choices) < 2:
-                a_stim.clear()
-                d_stim.clear()
-                used_sets.clear()
-                ad_stim_choices = remaining_stim.copy()
-                i = -1  # reset loop to start (will increment to 0 in next iteration)
-                bc_pairs = list(zip(b_stim.values(), c_stim.values()))
-                break
-            
-            candidate_a = np.random.choice(ad_stim_choices)
-            candidate_d = np.random.choice(ad_stim_choices)
-            set_a = get_set_id(candidate_a)
-            set_d = get_set_id(candidate_d)
-            forbidden_sets = {get_set_id(b_img), get_set_id(c_img)}
-            
-            if (set_a != set_d and 
-                set_a not in forbidden_sets and set_d not in forbidden_sets and
-                set_a not in used_sets and set_d not in used_sets
-            ):
-                a_stim[f"A{i+1}"] = candidate_a
-                d_stim[f"D{i+1}"] = candidate_d
-                used_sets.update({set_a, set_d})
-                ad_stim_choices.remove(candidate_a)
-                ad_stim_choices.remove(candidate_d)
-                break
-
+        a_img =  np.random.choice(ad_stim_choices)
+        ad_stim_choices.remove(a_img)
+        d_img =  np.random.choice(ad_stim_choices)
+        ad_stim_choices.remove(d_img)
+        a_stim[f"A{i+1}"] = a_img
+        d_stim[f"D{i+1}"] = d_img
+        
+        
     # shuffle the 6 rows of each stimulus assignment
     row_indices = np.arange(len(a_stim))
     np.random.shuffle(row_indices)
-    # reorder each stim dict by the shuffled indices
+    # reorder stimulus dicts
     a_stim = {f"A{i+1}": a_stim[f"A{row_indices[i]+1}"] for i in range(len(a_stim))}
     b_stim = {f"B{i+1}": b_stim[f"B{row_indices[i]+1}"] for i in range(len(b_stim))}
     c_stim = {f"C{i+1}": c_stim[f"C{row_indices[i]+1}"] for i in range(len(c_stim))}
     d_stim = {f"D{i+1}": d_stim[f"D{row_indices[i]+1}"] for i in range(len(d_stim))}
-
-    abcd_groups = {"A": a_stim, "B": b_stim, "C": c_stim, "D": d_stim}
-
+    
+    abcd_groups = {
+        "A": a_stim,
+        "B": b_stim,
+        "C": c_stim,
+        "D": d_stim
+    }
+    
     # --- Save assignments to CSV ---
     df_rows = []
-    num_pairs = len(abcd_groups["A"])  # assume A, B, C, D all same length
-
-    for pair_idx in range(num_pairs):
+    num_pairs = len(abcd_groups["A"])   # should be 6
+    for i in range(num_pairs):
         row = {
             "subject": exp_info["subject"],
             "session": exp_info["session"],
-            "group_num": pair_idx + 1,   # 1-based
-            "A": list(abcd_groups["A"].values())[pair_idx],
-            "B": list(abcd_groups["B"].values())[pair_idx],
-            "C": list(abcd_groups["C"].values())[pair_idx],
-            "D": list(abcd_groups["D"].values())[pair_idx]
+            "cb_num": cb_num,
+            "group_num": i + 1,   
+            "A": list(abcd_groups["A"].values())[i],
+            "B": list(abcd_groups["B"].values())[i],
+            "C": list(abcd_groups["C"].values())[i],
+            "D": list(abcd_groups["D"].values())[i]
         }
         df_rows.append(row)
 
     df = pd.DataFrame(df_rows)
     out_dir = "data"
     os.makedirs(out_dir, exist_ok=True)
-    df.to_csv(os.path.join(out_dir, f"{exp_info['file_prefix']}_stim-assignments.csv"), index=False)
+    save_path = os.path.join(out_dir, f"{exp_info['file_prefix']}_stim-assignments.csv")
+    df.to_csv(save_path, index=False)
 
     return abcd_groups
-
 
 def plot_stimuli(exp_info, abcd_groups, stim_folder):
     """Plot all assigned stimuli for QA."""

@@ -9,7 +9,7 @@ from IPython.display import Image, display
 from psychopy import data
 
 # Import specific functions from the new separated modules
-from utils.stimuli_generation import load_stimuli, generate_pairs, plot_stimuli
+from utils.stimuli_generation2 import load_stimuli, generate_pairs, plot_stimuli
 from utils.exposure_trials import generate_obj_stream, create_image_trials
 from utils.test_trials import generate_test_trials, generate_all_test_trials
 

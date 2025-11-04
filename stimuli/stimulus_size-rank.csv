@@ -1,25 +1,31 @@
-image,size_rank
-set-01_img-01.png,18
-set-01_img-02.png,7
-set-01_img-03.png,12
-set-01_img-04.png,6
-set-01_img-05.png,3
-set-02_img-01.png,2
-set-02_img-02.png,22
-set-02_img-03.png,1
-set-02_img-04.png,20
-set-02_img-05.png,16
-set-03_img-01.png,17
-set-03_img-02.png,15
-set-03_img-03.png,10
-set-03_img-04.png,14
-set-03_img-05.png,21
-unique_img-01.png,9
-unique_img-02.png,8
-unique_img-03.png,24
-unique_img-04.png,13
-unique_img-05.png,11
-unique_img-06.png,23
-unique_img-07.png,5
-unique_img-08.png,19
-unique_img-09.png,4
+image,object,size_rank
+set-01_pair-cb1.jpg,chicken hen,15
+set-01_pair-cb2.jpg,frying pan,1
+set-01_pair-lap.jpg,chicken egg,19
+set-02_pair-cb1.jpg,tennis racket,25
+set-02_pair-cb2.jpg,golden retriever,23
+set-02_pair-lap.jpg,tennis ball,12
+set-03_pair-cb1.jpg,chocolate chip cookie,2
+set-03_pair-cb2.jpg,dairy cow,22
+set-03_pair-lap.jpg,cup of milk,29
+set-04_pair-cb1.jpg,matchbox,6
+set-04_pair-cb2.jpg,birthday cake,13
+set-04_pair-lap.jpg,birthday candles,4
+set-05_pair-cb1.jpg,rodent mouse,20
+set-05_pair-cb2.jpg,bottle of wine,26
+set-05_pair-lap.jpg,cheese wedge,7
+set-06_pair-cb1.jpg,apple,14
+set-06_pair-cb2.jpg,earthworm,24
+set-06_pair-lap.jpg,fishing pole,30
+unique_img-01.jpg,digital camera,9
+unique_img-02.jpg,acoustic guitar,10
+unique_img-03.jpg,tabletop globe,5
+unique_img-04.jpg,little red wagon ,18
+unique_img-05.jpg,moped scooter,16
+unique_img-06.jpg,Saguaro Cactus,21
+unique_img-07.jpg,hair comb,28
+unique_img-08.jpg,beanie,27
+unique_img-09.jpg,pair of dice,17
+unique_img-10.jpg,tabletop fan,8
+unique_img-11.jpg,headphones,11
+unique_img-12.jpg,rocking chair,3
