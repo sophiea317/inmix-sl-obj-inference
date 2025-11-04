@@ -92,11 +92,17 @@ def generate_test_trials(
         rep_rng = random.Random((seed or 0) + rep)
         seq1_assignments = seq1_assignments_rep1 if rep == 0 else seq1_assignments_rep2
 
-        rep_rng.shuffle(foil_indices)
-        rep_rng.shuffle(target_pairs)
+        targ_shuffle_idx = list(range(len(target_pairs)))
+        foil_shuffle_idx = list(range(len(foil_indices)))
+        rep_rng.shuffle(targ_shuffle_idx)
+        rep_rng.shuffle(foil_shuffle_idx)
+        print("Target shuffle indices:", targ_shuffle_idx)
+        target_pairs_shuffled = [target_pairs[i] for i in targ_shuffle_idx]
+        seq1_assignments_shuffled = [seq1_assignments[i] for i in targ_shuffle_idx]
+        foil_indices_shuffled = [foil_indices[i] for i in foil_shuffle_idx]
 
         for target_idx, ((t1, t2), foil_idx, in_seq1) in enumerate(
-            zip(target_pairs, foil_indices, seq1_assignments)
+            zip(target_pairs_shuffled, foil_indices_shuffled, seq1_assignments_shuffled)
         ):
             f1, f2 = fixed_foil_pairs[foil_idx]
 
@@ -109,11 +115,14 @@ def generate_test_trials(
             targ2_label, targ2_grp_num, targ2_label_grp_num = get_stimulus_label(t2, abcd_groups)
             foil1_label, foil1_grp_num, foil1_label_grp_num = get_stimulus_label(f1, abcd_groups)
             foil2_label, foil2_grp_num, foil2_label_grp_num = get_stimulus_label(f2, abcd_groups)
+            
+            # Determine target group number for record
+            targ_grp_num = targ1_grp_num if targ1_grp_num == targ2_grp_num else "MIXED"
 
             trial = {
                 "rep": rep,
                 "block_num": 0,
-                "targ_grp_num": target_idx,
+                "targ_grp_num": targ_grp_num,
                 "targ_stim1": t1,
                 "targ_stim2": t2,
                 "targ1_label": targ1_label,
@@ -135,7 +144,7 @@ def generate_test_trials(
                 "seq2_stim1": seq2[0],
                 "seq2_stim2": seq2[1],
                 "correct_seq": correct_seq,
-                "correct_resp": "f" if correct_seq == "seq1" else "j",
+                "correct_resp": "f" if correct_seq == "seq1" else "j", 
                 "target_idx": target_idx,
                 "foil_idx": foil_idx,
             }
@@ -245,7 +254,7 @@ def generate_all_test_trials(exp_info: Dict, abcd_groups: Dict[str, Dict[str, st
     combined["task"] = "test"
     combined["block_tnum"] = combined.groupby("block_num").cumcount()
     combined["trial_num"] = range(len(combined))
-    combined["rep_tnum"] = combined.groupby(["block_num", "rep"]).cumcount() + 1
+    combined["rep_tnum"] = combined.groupby(["block_num", "rep"]).cumcount()
     combined["block"] = combined["test_type"].map(
         {"1-step": "indirect", "2-step": "indirect", "direct": "direct"}
     )

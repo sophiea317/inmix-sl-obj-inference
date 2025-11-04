@@ -6,6 +6,8 @@
 # python run_sl-obj-inference.py --sub 1234 --test 2-step
 # How to run with all args specified:
 # python run_sl-obj-inference.py --sub 1234 --ses 001 --expo retrospective --test 2-step --debug False --practice True --expoRun True --testRun True
+# python run_sl-obj-inference.py --sub 1234 --ses 001 --expo retrospective --test 2-step --debug t --practice false
+
 
 from psychopy import visual, core, event, data, gui, logging
 from psychopy import __version__ as psychopy_ver
@@ -55,7 +57,7 @@ if args.debug:
     MONITOR = "debugMonitor"
     SCREEN = 0
     WIN_SIZE = [800, 600]
-    bug = 0.25
+    bug = 0.5
 else:
     FULLSCREEN = True
     MONITOR = "testMonitor"
@@ -77,8 +79,8 @@ num_grps = 6
 num_reps = 40
 
 # Timing + keys
-IMG_DUR = .1 #1.0*bug                       # 1000 ms per image in stream
-ISI_DUR = .05 #0.5*bug                       # 500 ms between images in stream
+IMG_DUR = .05 #1.0*bug                       # 1000 ms per image in stream
+ISI_DUR = .01 #0.5*bug                       # 500 ms between images in stream
 PAUSE_DUR = ((IMG_DUR+ISI_DUR)*2)*bug     # 2500 ms pause between seqs in test
 FBCK_DUR = 0.15*bug                     # 150 ms feedback flash on response
 RES = 400*bug                           # image size in pixels on screen
@@ -127,7 +129,8 @@ exp_info['file_prefix'] = (
 this_exp = data.ExperimentHandler(
     name="Inmix-SL-Obj-Inference",
     extraInfo=exp_info,
-    dataFileName=os.path.join(data_folder, f"{exp_info['file_prefix']}_raw-data")
+    dataFileName=os.path.join(data_folder, f"{exp_info['file_prefix']}_raw-data"), 
+    savePickle=True, saveWideText=True,
 )
 
 # CSV paths
@@ -292,6 +295,13 @@ def break_trial():
     record = {
         "rt": rt
     }
+    
+    # Add break trial data to ExperimentHandler
+    this_exp.addData("trial_type", "break")
+    this_exp.addData("break_duration", rt)
+    this_exp.addData("break_completed", rt < BREAK_DUR)  # True if ended early with keypress
+    this_exp.nextEntry()
+    
     return record  # return time spent on break, in case needed for logging
     
 # Otherwise, the task will start again immediately after the countdown.
@@ -390,6 +400,19 @@ def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None
             record["acc"] = None
         record["rt"] = None
 
+    # Add trial-level data to ExperimentHandler
+    for key, value in record.items():
+        if key != "responses":  # Skip nested response data for main logging
+            this_exp.addData(key, value)
+    
+    # Add detailed response data if needed
+    if responses:
+        for i, resp in enumerate(responses):
+            this_exp.addData(f"response_{i+1}_key", resp["key"])
+            this_exp.addData(f"response_{i+1}_rt", resp["rt"])
+    
+    this_exp.nextEntry()
+
     return record
 
 def calculate_accuracy(trial_data):
@@ -448,11 +471,15 @@ def run_test():
         logging.error(f"test_trials.csv must have columns: {required_cols}. Found: {list(df.columns)}")
         core.quit()
 
-    # Gather unique images for preloading
+    # Gather images for preloading
     image_cols = ["seq1_stim1", "seq1_stim2", "seq2_stim1", "seq2_stim2"]
-    all_imgs = set()
-    for col in image_cols:
-        all_imgs.update(df[col].unique())
+    # get values from each column and add to all_imgs
+    all_imgs = df[image_cols[0]].copy()
+
+    for col in image_cols[1:]:
+        all_imgs = pd.concat([all_imgs, df[col]])
+
+    print(all_imgs)
     cache = preload_images(all_imgs)
 
     results = []
@@ -507,7 +534,8 @@ def run_test():
 
         # Response prompt
         response_prompt = (
-            f"Which sequence went together?\n\nPress '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
+            f"Which sequence went together?\n\n"
+            f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
             f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence"
         )
         response_text = visual.TextStim(win, text=response_prompt, color="white", height=30, pos=(0, 0))
@@ -518,27 +546,42 @@ def run_test():
         timer = core.Clock()
         key, rt = event.waitKeys(keyList=[TEST_SEQ1_KEY, TEST_SEQ2_KEY, "escape"], timeStamped=timer)[0]
         if key == "escape":
+            # end experiment but still save data
             win.close()
             core.quit()
 
-        choice = "sequence1" if key == TEST_SEQ1_KEY else "sequence2"
-        correct = int(choice == row["correct_seq"])
+        correct_key = TEST_SEQ1_KEY if row["correct_seq"] == "seq1" else TEST_SEQ2_KEY
+        choice_seq = "seq1" if key == TEST_SEQ1_KEY else "seq2"
+        choice_key = key
+        correct = (choice_seq == row["correct_seq"])
 
+        
         result = {
             "trial_num": t + 1,
             "pair_type": row.get("pair_type", "unknown"),
             "test_type": row.get("test_type", "unknown"),
             "block": row.get("block", "unknown"),
+            "targ_grp_num": row.get("targ_grp_num", "unknown"),
+            "target_idx": row.get("target_idx", "unknown"),
+            "foil_idx": row.get("foil_idx", "unknown"),
             "seq1_stim1": row["seq1_stim1"],
             "seq1_stim2": row["seq1_stim2"],
             "seq2_stim1": row["seq2_stim1"],
             "seq2_stim2": row["seq2_stim2"],
             "correct_seq": row["correct_seq"],
-            "choice": choice,
+            "correct_key": correct_key,
+            "choice_seq": choice_seq,
+            "choice_key": choice_key,
             "accuracy": correct,
             "rt": rt
         }
         results.append(result)
+        
+        # Add test trial data to ExperimentHandler
+        for key_name, value in result.items():
+            this_exp.addData(key_name, value)
+        this_exp.addData("phase", "test")
+        this_exp.nextEntry()
 
         # Feedback flash
         fb_color = "green" if correct else "red"
@@ -562,7 +605,7 @@ if RUN_PRACTICE:
     show_instructions(
         "Welcome!\n\n"
         "You will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
-        "All objects are shown at the same size on the screen. Base your answer on their real-life size.\n\n"
+        "All objects are shown as the same size on the screen. Base your answer on their real-life size.\n\n"
         "Press 'F' if the current object is bigger than the previous one.\n"
         "Press 'J' if the current object is smaller than the previous one.\n\n"
         "You must achieve 100% accuracy on practice trials to continue.\n\n"
@@ -639,7 +682,7 @@ if RUN_TESTS:
 # Save Data 
 # ------------------------
 all_data = all_practice_data + main_data
-df_all = pd.DataFrame(all_data)
+df_all  = pd.DataFrame(all_data)
 test_df = pd.DataFrame(test_data)
 
 practice_summary = {
@@ -659,7 +702,9 @@ if len(test_data) > 0:
 # -----------------------------
 # Wrap up
 # -----------------------------
+#saveData(results=results)
 show_instructions("Thank you for participating!\n\nThis concludes the experiment.")
 event.clearEvents()
 win.close()
 core.quit()
+

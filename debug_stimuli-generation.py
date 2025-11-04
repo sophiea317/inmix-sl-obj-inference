@@ -64,9 +64,9 @@ except Exception as e:
     raise
 
 
-# ----------------------
+# ---------------------------------
 # Print debugging info with set IDs
-# ----------------------
+# ---------------------------------
 if printing:
     print("\n--- A-B-C-D assignments ---")
     a_items = list(abcd_groups["A"].items())
