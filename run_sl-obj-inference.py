@@ -79,9 +79,9 @@ num_grps = 6
 num_reps = 40
 
 # Timing + keys
-IMG_DUR = .05 #1.0*bug                       # 1000 ms per image in stream
-ISI_DUR = .01 #0.5*bug                       # 500 ms between images in stream
-PAUSE_DUR = ((IMG_DUR+ISI_DUR)*2)*bug     # 2500 ms pause between seqs in test
+IMG_DUR = 1.0*bug                       # 1000 ms per image in stream
+ISI_DUR = 0.5*bug                       # 500 ms between images in stream
+PAUSE_DUR = (IMG_DUR*2)*bug             # 2500 ms pause between seqs in test
 FBCK_DUR = 0.15*bug                     # 150 ms feedback flash on response
 RES = 400*bug                           # image size in pixels on screen
 BREAK_DUR = 15                          # seconds for break countdown
@@ -267,7 +267,12 @@ def break_trial():
     
     # Initial display
     remaining = BREAK_DUR
-    instr_text.text = f"Take a short break!\n\nTime remaining: {remaining} seconds...\n\nPress any key to continue to the experiment.\nOtherwise, the experiment will start again immediately after the countdown."
+    instr_text.text = (
+        f"Take a short break!\n\n"
+        f"Time remaining: {remaining} seconds...\n\n"
+        f"Press any key to continue to the experiment.\n"
+        f"Otherwise, the experiment will start again immediately after the countdown."
+    )
     instr_text.draw()
     win.flip()
     
@@ -279,7 +284,12 @@ def break_trial():
         # Update display every second
         if current_time - last_update_time >= 1.0:
             remaining = max(0, BREAK_DUR - int(elapsed))
-            instr_text.text = f"Take a short break!\n\nTime remaining: {remaining} seconds...\n\nPress any key to continue to the experiment.\nOtherwise, the experiment will start again immediately after the countdown."
+            instr_text.text = (
+                f"Take a short break!\n\n"
+                f"Time remaining: {remaining} seconds...\n\n"
+                f"Press any key to continue to the experiment.\n"
+                f"Otherwise, the experiment will start again immediately after the countdown."
+            )
             instr_text.draw()
             win.flip()
             last_update_time = current_time
@@ -441,7 +451,7 @@ def run_stream(csv_path, label="stream"):
         logging.error(f"{csv_path} must contain an 'image' column.")
         core.quit()
 
-    practice_flag = (csv_path == practice_exposure_csv)
+    practice_flag = (csv_path == practice_exposure_csv or csv_path == practice_test_csv)
     cache = preload_images(df["image"], practice=practice_flag)
 
     records = []
@@ -458,38 +468,41 @@ def run_stream(csv_path, label="stream"):
         records.append(record)
     return records
 
-def run_test():
-    """Sequential test phase mimicking exposure presentation."""
-    if not os.path.exists(test_trials_csv):
-        logging.info("No test phase found. Skipping.")
+def run_test(test_csv, label="test", practice=False):
+    """Sequential test phase that can handle both practice and real test trials."""
+    if not os.path.exists(test_csv):
+        logging.info(f"No {label} phase found. Skipping.")
         return []
-    df = pd.read_csv(test_trials_csv)
+    df = pd.read_csv(test_csv)
 
     # Required columns check
     required_cols = {"seq1_stim1", "seq1_stim2", "seq2_stim1", "seq2_stim2", "correct_seq"}
     if not required_cols.issubset(df.columns):
-        logging.error(f"test_trials.csv must have columns: {required_cols}. Found: {list(df.columns)}")
+        logging.error(f"{test_csv} must have columns: {required_cols}. Found: {list(df.columns)}")
         core.quit()
 
     # Gather images for preloading
     image_cols = ["seq1_stim1", "seq1_stim2", "seq2_stim1", "seq2_stim2"]
-    # get values from each column and add to all_imgs
     all_imgs = df[image_cols[0]].copy()
 
     for col in image_cols[1:]:
         all_imgs = pd.concat([all_imgs, df[col]])
 
-    print(all_imgs)
-    cache = preload_images(all_imgs)
+    # Handle practice vs. real test image loading
+    if practice:
+        # Practice images have full paths in CSV
+        unique_imgs = set(all_imgs.dropna())
+        cache = {}
+        for img in unique_imgs:
+            if not os.path.exists(img):
+                logging.error(f"Missing practice test image: {img}")
+                core.quit()
+            cache[img] = visual.ImageStim(win, image=img, size=IMG_SIZE)
+    else:
+        # Real test images use preload_images function
+        cache = preload_images(all_imgs)
 
     results = []
-
-    # Show test instructions
-    test_type_str = df['test_type'].iloc[0] if 'test_type' in df.columns else "unknown"
-    show_instructions(
-        f"Test Phase: {test_type_str}\n\nYou will see two sequences of image pairs.\nChoose which sequence went together during learning.\n\n"
-        f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\nPress '{TEST_SEQ2_KEY.upper()}' for SECOND sequence\n\nPress any key to begin."
-    )
 
     # For each test row, present sequence 1, pause, sequence 2, then collect response
     for t, row in df.iterrows():
@@ -540,7 +553,7 @@ def run_test():
         )
         response_text = visual.TextStim(win, text=response_prompt, color="white", height=30, pos=(0, 0))
         response_text.draw()
-        fixation.draw()
+        # fixation.draw()
         win.flip()
 
         timer = core.Clock()
@@ -580,16 +593,13 @@ def run_test():
         # Add test trial data to ExperimentHandler
         for key_name, value in result.items():
             this_exp.addData(key_name, value)
-        this_exp.addData("phase", "test")
+        this_exp.addData("phase", label)
         this_exp.nextEntry()
-
-        # Feedback flash
-        fb_color = "green" if correct else "red"
-        fb = visual.TextStim(win, text="Correct" if correct else "Incorrect", color=fb_color, height=40)
-        fb.draw()
+        
+        # Post-response fixation before next trial
         fixation.draw()
         win.flip()
-        core.wait(0.5)
+        core.wait(ISI_DUR)
 
     return results
 
@@ -597,86 +607,196 @@ def run_test():
 # Experiment Flow
 # ------------------------
 all_practice_data = []
+practice_test_data = []
 accuracy = 0.0
 summary = ""
 practice_attempt = 0
-
-if RUN_PRACTICE:
-    show_instructions(
-        "Welcome!\n\n"
-        "You will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
-        "All objects are shown as the same size on the screen. Base your answer on their real-life size.\n\n"
-        "Press 'F' if the current object is bigger than the previous one.\n"
-        "Press 'J' if the current object is smaller than the previous one.\n\n"
-        "You must achieve 100% accuracy on practice trials to continue.\n\n"
-        "Press any key to begin practice."
-    )
-
-    practice_attempt = 1
-    max_practice_attempts = 20
-    all_practice_data = []
-
-    while practice_attempt <= max_practice_attempts:
-        logging.info(f"Practice attempt {practice_attempt}")
-        practice_data = run_stream(practice_exposure_csv, label=f"practice_attempt_{practice_attempt}")
-        all_practice_data.extend(practice_data)
-
-        accuracy, summary = calculate_accuracy(practice_data)
-        logging.info(f"Practice accuracy: {accuracy:.1%} - {summary}")
-
-        if accuracy == 1.0:
-            show_instructions(
-                f"Excellent! You achieved 100% accuracy!\n\n"
-                f"{summary}\n\n"
-                f"You're ready for the main experiment.\n\n"
-                f"Press any key to continue."
-            )
-            break
-        else:
-            if practice_attempt >= max_practice_attempts:
-                show_instructions(
-                    f"Practice complete after {max_practice_attempts} attempts.\n\n"
-                    f"Response accuracy: {accuracy:.1%}\n\n"
-                    f"You will now proceed to the main experiment.\n\n"
-                    f"Press any key to continue."
-                )
-            else:
-                show_instructions(
-                    f"Practice accuracy: {accuracy:.1%}\n"
-                    f"You need 100% accuracy to continue.\n"
-                    f"Let's try the practice again.\n\n"
-                    f"Remember:\n"
-                    f"- Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
-                    f"- Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
-                    f"Press any key to retry."
-                )
-            practice_attempt += 1
-
-    show_instructions(
-        f"Now the real experiment will begin.\n\n"
-        f"Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
-        f"Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
-        f"Press any key to start."
-    )
-else:
-    if RUN_EXPOSURE:
-        show_instructions(
-            f"Welcome to the experiment!\n\n"
-            f"You will see a sequence of images.\n\n"
-            f"Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
-            f"Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
-            f"Press any key to begin."
-        )
 
 # Initialize data lists
 main_data = []
 test_data = []
 
 if RUN_EXPOSURE:
+    # Run exposure practice before main exposure phase
+    if RUN_PRACTICE:
+        show_instructions(
+            "Welcome!\n\n"
+            "You will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
+            "All objects are shown as the same size on the screen. Base your answer on their real-life size.\n\n"
+            "Press 'F' if the current object is bigger than the previous one.\n"
+            "Press 'J' if the current object is smaller than the previous one.\n\n"
+            "You must achieve 100% accuracy on practice trials to continue.\n\n"
+            "Press any key to begin practice."
+        )
+        practice_attempt = 1
+        max_practice_attempts = 20
+        all_practice_data = []
+
+        while practice_attempt <= max_practice_attempts:
+            logging.info(f"Practice attempt {practice_attempt}")
+            practice_data = run_stream(practice_exposure_csv, label=f"practice_attempt_{practice_attempt}")
+            all_practice_data.extend(practice_data)
+
+            accuracy, summary = calculate_accuracy(practice_data)
+            logging.info(f"Practice accuracy: {accuracy:.1%} - {summary}")
+
+            if accuracy == 1.0:
+                show_instructions(
+                    f"Excellent! You achieved 100% accuracy!\n\n"
+                    f"{summary}\n\n"
+                    f"You're ready for the main exposure phase.\n\n"
+                    f"Press any key to continue."
+                )
+                break
+            else:
+                if practice_attempt >= max_practice_attempts:
+                    show_instructions(
+                        f"Practice complete after {max_practice_attempts} attempts.\n\n"
+                        f"Response accuracy: {accuracy:.1%}\n\n"
+                        f"You will now proceed to the main experiment.\n\n"
+                        f"Press any key to continue."
+                    )
+                else:
+                    show_instructions(
+                        f"Practice accuracy: {accuracy:.1%}\n"
+                        f"You need 100% accuracy to continue.\n"
+                        f"Let's try the practice again.\n\n"
+                        f"Remember:\n"
+                        f"- Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
+                        f"- Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
+                        f"Press any key to retry."
+                    )
+                practice_attempt += 1
+
+        show_instructions(
+            f"Great! Now the main exposure phase will begin.\n\n"
+            f"Press '{EXPO_BIGGER_KEY.upper()}' if bigger than previous object\n"
+            f"Press '{EXPO_SMALLER_KEY.upper()}' if smaller than previous object\n\n"
+            f"Press any key to start."
+        )
+    else:
+        show_instructions(
+            f"Exposure Phase\n\n"
+            f"You will see images of objects in a stream. Your task is to decide whether each object is bigger or smaller than the one before it.\n"
+            f"All objects are shown as the same size on the screen. Base your answer on their real-life size.\n\n"
+            f"Press '{EXPO_BIGGER_KEY.upper()}' if the current object is bigger than the previous one.\n"
+            f"Press '{EXPO_SMALLER_KEY.upper()}' if the current object is smaller than the previous one.\n\n"
+            f"Press any key to begin."
+        )
     main_data = run_stream(exposure_trials_csv, label="exposure")
 
 if RUN_TESTS:
-    test_data = run_test()
+    # Run test practice phase before main test
+    if RUN_PRACTICE:
+        show_instructions(
+            f"During the bigger/smaller task, you may have noticed some objects seem to belong together based on their proximity in the sequence or associations with other objects.\n"
+            f"In this part of the experiment, you will complete several tests. Each test will show two pairs of objects, one after the other, with a brief pause in between.\n"
+            f"Your task is to decide which pair feels more familiar based on what you saw earlier in the experiment.\n\n"
+            f"Press '{TEST_SEQ1_KEY.upper()}' if the FIRST pair feels more familiar.\n"
+            f"Press '{TEST_SEQ2_KEY.upper()}' if the SECOND pair feels more familiar.\n\n"
+            f"You will start with a few practice tests. There are no right or wrong answers during practice. The goal is to help you get used to the format.\n\n"
+            f"Press any key to begin the practice."
+        )
+        
+        # Practice test retry loop
+        practice_test_attempt = 1
+        max_practice_test_attempts = 5
+        all_practice_test_data = []
+        
+        while practice_test_attempt <= max_practice_test_attempts:
+            logging.info(f"Practice test attempt {practice_test_attempt}")
+            current_practice_test_data = run_test(practice_test_csv, label=f"practice_test_attempt_{practice_test_attempt}", practice=True)
+            all_practice_test_data.extend(current_practice_test_data)
+            
+            if current_practice_test_data:
+                test_accuracy, test_summary = calculate_accuracy(current_practice_test_data)
+                logging.info(f"Practice test accuracy: {test_accuracy:.1%} - {test_summary}")
+                
+                # Ask if they want to continue or retry
+                while True:
+                    retry_text = (
+                        f"Practice Complete!\n\n"
+                        f"You can choose to RESTART the practice if you feel you need more practice,\n"
+                        f"or CONTINUE to the experiment if you understand the test format.\n\n"
+                        f"Press 'C' to CONTINUE to the experiment\n"
+                        f"Press 'R' to RESTART the practice"
+                    )
+                    
+                    instr_text.text = retry_text
+                    instr_text.draw()
+                    win.flip()
+
+                    keys = event.waitKeys(keyList=['c', 'r', 'escape'])
+                    if keys[0] in ['escape']:
+                        show_instructions("Experiment cancelled.\n\nThank you for your time.")
+                        win.close()
+                        core.quit()
+                    elif keys[0] == 'c':
+                        # Continue to main test
+                        practice_test_data = all_practice_test_data
+                        show_instructions(
+                            f"Great! Now you understand the format of the next phase.\n"
+                            f"The real test will use images of real-world objects that you saw during the bigger/smaller task.\n\n"
+                            f"Press any key to begin the actual experiment."
+                        )
+                        break
+                    elif keys[0] == 'r':
+                        # Retry practice test
+                        if practice_test_attempt >= max_practice_test_attempts:
+                            show_instructions(
+                                f"Maximum practice attempts ({max_practice_test_attempts}) reached.\n\n"
+                                f"You will now proceed to the actual experiment.\n\n"
+                                f"Press any key to continue."
+                            )
+                            practice_test_data = all_practice_test_data
+                            break
+                        else:
+                            show_instructions(
+                                f"Let's try the practice again.\n\n"
+                                f"Remember:\n"
+                                f"- Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
+                                f"- Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence\n\n"
+                                f"Press any key to continue the practice."
+                            )
+                            practice_test_attempt += 1
+                            break
+                
+                # Break out of retry loop if continuing to main test
+                if keys[0] == 'c' or practice_test_attempt > max_practice_test_attempts:
+                    break
+            else:
+                show_instructions(
+                    f"Test practice complete.\n\n"
+                    f"Now the real test will begin.\n\n"
+                    f"Press any key to continue."
+                )
+                practice_test_data = []
+                break
+    else:
+        # No practice, initialize empty practice test data
+        practice_test_data = []
+        show_instructions(
+            f"Test Phase\n\n"
+            f"You will see two sequences of image pairs.\n"
+            f"Choose which sequence went together during the exposure phase.\n\n"
+            f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
+            f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence\n\n"
+            f"Press any key to begin."
+        )
+    
+    # Show main test instructions (regardless of practice)
+    if RUN_PRACTICE:
+        # If practice was run, show transition message
+        show_instructions(
+            f"Main Test Phase\n\n"
+            f"You will see two sequences of image pairs.\n"
+            f"Choose which sequence went together during the exposure phase.\n\n"
+            f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
+            f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence\n\n"
+            f"Press any key to begin the main test."
+        )
+    
+    test_data = run_test(test_trials_csv, label="test", practice=False)
 
 # ------------------------
 # Save Data 
@@ -698,6 +818,9 @@ practice_summary_df.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}
 df_all.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_exposure-data.csv"), index=False)
 if len(test_data) > 0:
     test_df.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_test-data.csv"), index=False)
+if len(practice_test_data) > 0:
+    practice_test_df = pd.DataFrame(practice_test_data)
+    practice_test_df.to_csv(os.path.join(data_folder, f"{exp_info['file_prefix']}_practice-test-data.csv"), index=False)
 
 # -----------------------------
 # Wrap up
