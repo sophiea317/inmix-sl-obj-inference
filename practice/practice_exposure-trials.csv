@@ -1,9 +1,9 @@
-﻿image,object,size_rank,size,correct_resp
-practice/stimuli/images/1-A.png,bike,3,none,none
-practice/stimuli/images/1-B.png,snail,12,smaller,j
-practice/stimuli/images/2-A.png,tree,1,bigger,f
-practice/stimuli/images/2-B.png,cherries,11,smaller,j
-practice/stimuli/images/3-A.png,umbrella,4,bigger,f
-practice/stimuli/images/3-B.png,heels,7,smaller,j
-practice/stimuli/images/3-C.png,microscope,5,bigger,f
-practice/stimuli/images/3-D.png,sail boat,2,bigger,f
+﻿image,object,size_rank,size,correct_resp,task
+practice/stimuli/images/1-A.png,bike,3,none,none,practice-expo
+practice/stimuli/images/1-B.png,snail,12,smaller,j,practice-expo
+practice/stimuli/images/2-A.png,tree,1,bigger,f,practice-expo
+practice/stimuli/images/2-B.png,cherries,11,smaller,j,practice-expo
+practice/stimuli/images/3-A.png,umbrella,4,bigger,f,practice-expo
+practice/stimuli/images/3-B.png,heels,7,smaller,j,practice-expo
+practice/stimuli/images/3-C.png,microscope,5,bigger,f,practice-expo
+practice/stimuli/images/3-D.png,sail boat,2,bigger,f,practice-expo

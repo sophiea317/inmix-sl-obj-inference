@@ -1,5 +1,5 @@
-﻿seq1_stim1,seq1_stim2,seq2_stim1,seq2_stim2,correct_seq
-practice/stimuli/images/1-C.png,practice/stimuli/images/2-D.png,practice/stimuli/images/3-C.png,practice/stimuli/images/3-D.png,seq2
-practice/stimuli/images/1-A.png,practice/stimuli/images/1-B.png,practice/stimuli/images/3-A.png,practice/stimuli/images/1-B.png,seq1
-practice/stimuli/images/2-B.png,practice/stimuli/images/2-C.png,practice/stimuli/images/1-B.png,practice/stimuli/images/3-C.png,seq1
-practice/stimuli/images/1-A.png,practice/stimuli/images/3-B.png,practice/stimuli/images/3-A.png,practice/stimuli/images/3-B.png,seq2
+﻿seq1_stim1,seq1_stim2,seq2_stim1,seq2_stim2,correct_seq,test_type,pair_type,block,task
+practice/stimuli/images/1-C.png,practice/stimuli/images/2-D.png,practice/stimuli/images/3-C.png,practice/stimuli/images/3-D.png,seq2,practice,direct,1,practice-test
+practice/stimuli/images/1-A.png,practice/stimuli/images/1-B.png,practice/stimuli/images/3-A.png,practice/stimuli/images/1-B.png,seq1,practice,direct,1,practice-test
+practice/stimuli/images/2-B.png,practice/stimuli/images/2-C.png,practice/stimuli/images/1-B.png,practice/stimuli/images/3-C.png,seq1,practice,indirect,1,practice-test
+practice/stimuli/images/1-A.png,practice/stimuli/images/3-B.png,practice/stimuli/images/3-A.png,practice/stimuli/images/3-B.png,seq2,practice,indirect,1,practice-test
