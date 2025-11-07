@@ -147,9 +147,9 @@ practice_test_csv = os.path.join(practice_folder, "practice_test-trials.csv")
 # ------------------------------
 # Initialize stimuli
 # ------------------------------
-unique_stim, linking_stim_by_set, rank_dict = load_stimuli(rank_file=rank_file)
+unique_stim, linking_stim_by_set, rank_dict, obj_dict = load_stimuli(rank_file=rank_file)
 abcd_groups = generate_pairs(exp_info, unique_stim, linking_stim_by_set)
-obj_stream_data = generate_obj_stream(exp_info, abcd_groups, rank_dict)
+obj_stream_data = generate_obj_stream(exp_info, abcd_groups, rank_dict, obj_dict)
 test_trials_df = generate_all_test_trials(exp_info, abcd_groups)
 
 # -----------------------------

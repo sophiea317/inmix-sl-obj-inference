@@ -16,6 +16,7 @@ from numpy.random import randint, choice as randchoice
 def load_stimuli(rank_file):
     """Load and categorize stimuli from the folder."""
     rank_dict = pd.read_csv(rank_file).set_index('image')['size_rank'].to_dict()
+    obj_dict = pd.read_csv(rank_file).set_index('image')['object'].to_dict()
     stim_set = rank_dict.keys()   #[f for f in os.listdir(stim_folder) if f.endswith(".png")]
     unique_stim = [f for f in stim_set if "unique" in f]
     linking_stim = [f for f in stim_set if "set" in f]
@@ -26,7 +27,7 @@ def load_stimuli(rank_file):
         set_id = f.split("_")[0]
         linking_stim_by_set.setdefault(set_id, []).append(f)
 
-    return unique_stim, linking_stim_by_set, rank_dict
+    return unique_stim, linking_stim_by_set, rank_dict, obj_dict
 
 
 def get_set_id(filename):

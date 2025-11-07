@@ -114,7 +114,7 @@ import os
 import pandas as pd
 
 
-def generate_obj_stream(exp_info, abcd_groups, rank_dict):
+def generate_obj_stream(exp_info, abcd_groups, rank_dict, obj_dict):
     """
     Generate the object stream for the test phase.
 
@@ -184,7 +184,7 @@ def generate_obj_stream(exp_info, abcd_groups, rank_dict):
     fields = [
         'task', 'task_tNum', 'block_num', 'block_tNum', 'stream', 'stream_num',
         'stream_tNum', 'pair_label', 'pair_trial_idx', 'stream_pair_idx', 'stim_label',
-        'grp_num', 'stim_label_grp_num', 'image', 'position_in_pair',
+        'grp_num', 'stim_label_grp_num', 'image', 'object', 'position_in_pair',
         'rank_num', 'size', 'correct_resp'
     ]
     obj_stream_data = {k: [] for k in fields}
@@ -193,6 +193,7 @@ def generate_obj_stream(exp_info, abcd_groups, rank_dict):
     def append_trial(trial, context):
         """Append a single exposure trial."""
         current_rank = rank_dict[trial['image']]
+        current_obj = obj_dict[trial['image']]
         prev_rank = context['previous_rank']
 
         if context['block_tNum'] == 0:
@@ -218,6 +219,7 @@ def generate_obj_stream(exp_info, abcd_groups, rank_dict):
         obj_stream_data['pair_label'].append(trial['pair_label'])
         obj_stream_data['stim_label'].append(trial['stim_label'])
         obj_stream_data['image'].append(trial['image'])
+        obj_stream_data['object'].append(current_obj)
         obj_stream_data['position_in_pair'].append(trial['position_in_pair'])
         obj_stream_data['stim_label_grp_num'].append(trial['stim_label_grp_num'])
         obj_stream_data['rank_num'].append(current_rank)
