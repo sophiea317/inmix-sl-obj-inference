@@ -21,7 +21,7 @@ import argparse
 from utils.stimuli_generation import load_stimuli, generate_pairs, plot_stimuli
 from utils.exposure_trials import generate_obj_stream
 from utils.test_trials import generate_all_test_trials
-from onscreen_text import *
+from utils.onscreen_text import *
 
 # -----------------------------
 # Argument parsing
@@ -78,8 +78,8 @@ num_grps = 6
 num_reps = 40
 
 # Timing + keys
-IMG_DUR = 1.0*bug                       # 1000 ms per image in stream
-ISI_DUR = 0.5*bug                       # 500 ms between images in stream
+IMG_DUR = 0.1#1.0*bug                       # 1000 ms per image in stream
+ISI_DUR = 0.05#0.5*bug                       # 500 ms between images in stream
 PAUSE_DUR = (IMG_DUR*2)*bug             # 2500 ms pause between seqs in test
 FBCK_DUR = 0.15*bug                     # 150 ms feedback flash on response
 BREAK_DUR = 15                          # seconds for break countdown
@@ -266,8 +266,8 @@ def get_correct_key(extra_info):
 
 def break_trial():
     """Present a break screen that counts down from BREAK_DUR seconds or until keypress."""
-    start_time = core.getTime()
-    last_update_time = start_time
+    break_start_time = core.getTime()
+    last_update_time = break_start_time
     
     # Initial display
     remaining = BREAK_DUR
@@ -278,12 +278,15 @@ def break_trial():
         f"Otherwise, the experiment will start again immediately after the countdown."
     )
     instr_text.draw()
-    win.flip()
+    break_display_onset = win.flip()
+    
+    # Track all screen updates
+    update_times = [break_display_onset]
     
     # update text each second (NOT frame-based)
     while True:
         current_time = core.getTime()
-        elapsed = current_time - start_time
+        elapsed = current_time - break_start_time
         
         # Update display every second
         if current_time - last_update_time >= 1.0:
@@ -295,18 +298,31 @@ def break_trial():
                 f"Otherwise, the experiment will start again immediately after the countdown."
             )
             instr_text.draw()
-            win.flip()
+            update_onset = win.flip()
+            update_times.append(update_onset)
             last_update_time = current_time
         
         keys = event.getKeys()
         if keys:
             rt = elapsed
+            break_end_reason = "keypress"
             break
         if elapsed >= BREAK_DUR:
             rt = elapsed
+            break_end_reason = "timeout"
             break
     
+    break_end_time = core.getTime()
+    
     record = {
+        "break_start_time": break_start_time,
+        "break_end_time": break_end_time,
+        "break_display_onset": break_display_onset,
+        "break_duration_actual": break_end_time - break_start_time,
+        "break_duration_planned": BREAK_DUR,
+        "break_end_reason": break_end_reason,
+        "break_num_updates": len(update_times),
+        "break_update_times": update_times,
         "rt": rt
     }
     
@@ -314,6 +330,9 @@ def break_trial():
     this_exp.addData("trial_type", "break")
     this_exp.addData("break_duration", rt)
     this_exp.addData("break_completed", rt < BREAK_DUR)  # True if ended early with keypress
+    this_exp.addData("break_start_time", break_start_time)
+    this_exp.addData("break_end_time", break_end_time)
+    this_exp.addData("break_end_reason", break_end_reason)
     this_exp.nextEntry()
     
     return record  # return time spent on break, in case needed for logging
@@ -342,11 +361,14 @@ def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None
     trial_clock = core.Clock()
     responses = []
 
-    # Draw initial frame and flip to get onset_time
+    # Draw initial frame and flip to get stimulus onset_time
     stim.draw()
     fixation.draw()
     response_text_stim.draw()
-    onset_time = win.flip()
+    stim_onset_time = win.flip()
+    stim_offset_time = None
+    isi_onset_time = None
+    isi_offset_time = None
 
     total_duration = duration + isi
     # Frame-based loop covering both stimulus presentation and ISI
@@ -367,21 +389,45 @@ def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None
         # Update flash handler (frame bookkeeping)
         _flash_handler.update()
 
-        # Draw appropriate content
+        # Draw appropriate content and capture timing transitions
         if in_stim_phase:
             stim.draw()
-        # else: ISI -> only fixation
+        else:
+            # Transitioning to ISI - record stimulus offset and ISI onset
+            if stim_offset_time is None:
+                stim_offset_time = core.getTime()
+            if isi_onset_time is None:
+                isi_onset_time = core.getTime()
+        # Always draw fixation and response text
         fixation.draw()
         response_text_stim.draw()
         win.flip()
 
-    # Post-trial record creation
+    # Record final ISI offset time
+    isi_offset_time = core.getTime()
+
+    # Calculate durations
+    actual_stim_duration = stim_offset_time - stim_onset_time if stim_offset_time else duration
+    actual_isi_duration = isi_offset_time - isi_onset_time if isi_onset_time else 0
+    total_trial_duration = isi_offset_time - stim_onset_time
+
+    # Post-trial record creation with comprehensive timing
     record = {
         "trial_num": trial_num,
         "image": img_name,
-        "onset_time": onset_time,
-        "duration": duration,
+        "stim_onset_time": stim_onset_time,
+        "stim_offset_time": stim_offset_time,
+        "stim_duration_planned": duration,
+        "stim_duration_actual": actual_stim_duration,
+        "isi_onset_time": isi_onset_time,
+        "isi_offset_time": isi_offset_time,
+        "isi_duration_planned": isi,
+        "isi_duration_actual": actual_isi_duration,
+        "trial_duration_total": total_trial_duration,
         "responses": responses,
+        # Keep legacy fields for backward compatibility
+        "onset_time": stim_onset_time,
+        "duration": duration,
     }
     if extra_info:
         record.update(extra_info)
@@ -509,102 +555,156 @@ def run_test(test_csv, label="test", practice=False):
 
     # For each test row, present sequence 1, pause, sequence 2, then collect response
     for t, row in df.iterrows():
-        # Sequence 1: first image
-        cache[row["seq1_stim1"]].draw()
-        fixation.draw()
-        win.flip()
-        core.wait(IMG_DUR)
-
-        # ISI
-        fixation.draw()
-        win.flip()
-        core.wait(ISI_DUR)
-
-        # Sequence 1: second image
-        cache[row["seq1_stim2"]].draw()
-        fixation.draw()
-        win.flip()
-        core.wait(IMG_DUR)
-
-        # Pause between sequences
-        fixation.draw()
-        win.flip()
-        core.wait(PAUSE_DUR)
-
-        # Sequence 2: first image
-        cache[row["seq2_stim1"]].draw()
-        fixation.draw()
-        win.flip()
-        core.wait(IMG_DUR)
-
-        # ISI
-        fixation.draw()
-        win.flip()
-        core.wait(ISI_DUR)
-
-        # Sequence 2: second image
-        cache[row["seq2_stim2"]].draw()
-        fixation.draw()
-        win.flip()
-        core.wait(IMG_DUR)
-
-        # Response prompt
-        response_prompt = (
-            f"Which sequence went together?\n\n"
-            f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
-            f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence"
-        )
-        response_text = visual.TextStim(win, text=response_prompt, color="white", height=TXT_SIZE, pos=(0, 0))
-        response_text.draw()
-        # fixation.draw()
-        win.flip()
-
-        timer = core.Clock()
-        key, rt = event.waitKeys(keyList=[TEST_SEQ1_KEY, TEST_SEQ2_KEY, "escape"], timeStamped=timer)[0]
-        if key == "escape":
-            # end experiment but still save data
-            win.close()
-            core.quit()
-
-        correct_key = TEST_SEQ1_KEY if row["correct_seq"] == "seq1" else TEST_SEQ2_KEY
-        choice_seq = "seq1" if key == TEST_SEQ1_KEY else "seq2"
-        choice_key = key
-        correct = (choice_seq == row["correct_seq"])
-
-        
-        result = {
-            "trial_num": t + 1,
-            "pair_type": row.get("pair_type", "unknown"),
-            "test_type": row.get("test_type", "unknown"),
-            "block": row.get("block", "unknown"),
-            "targ_grp_num": row.get("targ_grp_num", "unknown"),
-            "target_idx": row.get("target_idx", "unknown"),
-            "foil_idx": row.get("foil_idx", "unknown"),
-            "seq1_stim1": row["seq1_stim1"],
-            "seq1_stim2": row["seq1_stim2"],
-            "seq2_stim1": row["seq2_stim1"],
-            "seq2_stim2": row["seq2_stim2"],
-            "correct_seq": row["correct_seq"],
-            "correct_key": correct_key,
-            "choice_seq": choice_seq,
-            "choice_key": choice_key,
-            "accuracy": correct,
-            "rt": rt
-        }
+        result = present_test_trial(row, t, cache, label, practice)
         results.append(result)
         
-        # Add test trial data to ExperimentHandler
-        for key_name, value in result.items():
-            this_exp.addData(key_name, value)
-        this_exp.addData("phase", label)
-        this_exp.nextEntry()
-        
-        # Post-response fixation before next trial
-        fixation.draw()
-        win.flip()
-        core.wait(ISI_DUR)
-
     return results
+
+def present_test_trial(row, trial_num, img_cache, label, practice=False):
+    """Present a test trial with comprehensive timing recording."""
+    
+    # Initialize timing variables
+    timing_log = {}
+    trial_start_time = core.getTime()
+    
+    # Sequence 1: first image
+    img_cache[row["seq1_stim1"]].draw()
+    fixation.draw()
+    seq1_img1_onset = win.flip()
+    timing_log["seq1_img1_onset"] = seq1_img1_onset
+    core.wait(IMG_DUR)
+    seq1_img1_offset = core.getTime()
+    timing_log["seq1_img1_offset"] = seq1_img1_offset
+    timing_log["seq1_img1_duration"] = seq1_img1_offset - seq1_img1_onset
+
+    # ISI after seq1_img1
+    fixation.draw()
+    isi1_onset = win.flip()
+    timing_log["isi1_onset"] = isi1_onset
+    core.wait(ISI_DUR)
+    isi1_offset = core.getTime()
+    timing_log["isi1_offset"] = isi1_offset
+    timing_log["isi1_duration"] = isi1_offset - isi1_onset
+
+    # Sequence 1: second image
+    img_cache[row["seq1_stim2"]].draw()
+    fixation.draw()
+    seq1_img2_onset = win.flip()
+    timing_log["seq1_img2_onset"] = seq1_img2_onset
+    core.wait(IMG_DUR)
+    seq1_img2_offset = core.getTime()
+    timing_log["seq1_img2_offset"] = seq1_img2_offset
+    timing_log["seq1_img2_duration"] = seq1_img2_offset - seq1_img2_onset
+
+    # Pause between sequences
+    fixation.draw()
+    inter_seq_pause_onset = win.flip()
+    timing_log["inter_seq_pause_onset"] = inter_seq_pause_onset
+    core.wait(PAUSE_DUR)
+    inter_seq_pause_offset = core.getTime()
+    timing_log["inter_seq_pause_offset"] = inter_seq_pause_offset
+    timing_log["inter_seq_pause_duration"] = inter_seq_pause_offset - inter_seq_pause_onset
+
+    # Sequence 2: first image
+    img_cache[row["seq2_stim1"]].draw()
+    fixation.draw()
+    seq2_img1_onset = win.flip()
+    timing_log["seq2_img1_onset"] = seq2_img1_onset
+    core.wait(IMG_DUR)
+    seq2_img1_offset = core.getTime()
+    timing_log["seq2_img1_offset"] = seq2_img1_offset
+    timing_log["seq2_img1_duration"] = seq2_img1_offset - seq2_img1_onset
+
+    # ISI after seq2_img1
+    fixation.draw()
+    isi2_onset = win.flip()
+    timing_log["isi2_onset"] = isi2_onset
+    core.wait(ISI_DUR)
+    isi2_offset = core.getTime()
+    timing_log["isi2_offset"] = isi2_offset
+    timing_log["isi2_duration"] = isi2_offset - isi2_onset
+
+    # Sequence 2: second image
+    img_cache[row["seq2_stim2"]].draw()
+    fixation.draw()
+    seq2_img2_onset = win.flip()
+    timing_log["seq2_img2_onset"] = seq2_img2_onset
+    core.wait(IMG_DUR)
+    seq2_img2_offset = core.getTime()
+    timing_log["seq2_img2_offset"] = seq2_img2_offset
+    timing_log["seq2_img2_duration"] = seq2_img2_offset - seq2_img2_onset
+
+    # Response prompt
+    response_prompt = (
+        f"Which sequence went together?\n\n"
+        f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
+        f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence"
+    )
+    response_text = visual.TextStim(win, text=response_prompt, color="white", height=30, pos=(0, 0))
+    response_text.draw()
+    response_onset = win.flip()
+    timing_log["response_onset"] = response_onset
+
+    timer = core.Clock()
+    key, rt = event.waitKeys(keyList=[TEST_SEQ1_KEY, TEST_SEQ2_KEY, "escape"], timeStamped=timer)[0]
+    if key == "escape":
+        win.close()
+        core.quit()
+    
+    response_offset = core.getTime()
+    timing_log["response_offset"] = response_offset
+    timing_log["response_duration"] = response_offset - response_onset
+
+    correct_key = TEST_SEQ1_KEY if row["correct_seq"] == "seq1" else TEST_SEQ2_KEY
+    choice_seq = "seq1" if key == TEST_SEQ1_KEY else "seq2"
+    choice_key = key
+    correct = (choice_seq == row["correct_seq"])
+
+  
+    fixation.draw()
+    post_isi_onset = win.flip()
+    timing_log["post_isi_onset"] = post_isi_onset
+    core.wait(0.5)
+    post_isi_offset = core.getTime()
+    timing_log["post_isi_offset"] = post_isi_offset
+    timing_log["post_isi_duration"] = post_isi_offset - post_isi_onset
+
+    # Calculate total trial duration
+    trial_end_time = core.getTime()
+    timing_log["trial_start_time"] = trial_start_time
+    timing_log["trial_end_time"] = trial_end_time
+    timing_log["trial_total_duration"] = trial_end_time - trial_start_time
+
+    # Compile comprehensive result record
+    result = {
+        "trial_num": trial_num + 1,
+        "pair_type": row.get("pair_type", "unknown"),
+        "test_type": row.get("test_type", "unknown"),
+        "block": row.get("block", "unknown"),
+        "targ_grp_num": row.get("targ_grp_num", "unknown"),
+        "target_idx": row.get("target_idx", "unknown"),
+        "foil_idx": row.get("foil_idx", "unknown"),
+        "seq1_stim1": row["seq1_stim1"],
+        "seq1_stim2": row["seq1_stim2"],
+        "seq2_stim1": row["seq2_stim1"],
+        "seq2_stim2": row["seq2_stim2"],
+        "correct_seq": row["correct_seq"],
+        "correct_key": correct_key,
+        "choice_seq": choice_seq,
+        "choice_key": choice_key,
+        "accuracy": correct,
+        "rt": rt,
+        # Add all timing information
+        **timing_log
+    }
+    
+    # Add test trial data to ExperimentHandler
+    for key_name, value in result.items():
+        this_exp.addData(key_name, value)
+    this_exp.addData("phase", label)
+    this_exp.nextEntry()
+    
+    return result
 
 # ------------------------
 # Experiment Flow
@@ -629,6 +729,7 @@ if RUN_EXPOSURE:
         practice_attempt = 1
         max_practice_attempts = 20
         all_practice_data = []
+        min_accuracy = 0.0 #if args.debug else 1.0 # require 100% accuracy to pass practice unless in debug mode
 
         while practice_attempt <= max_practice_attempts:
             logging.info(f"Practice attempt {practice_attempt}")
@@ -638,7 +739,7 @@ if RUN_EXPOSURE:
             accuracy, summary = calculate_accuracy(practice_data)
             logging.info(f"Practice accuracy: {accuracy:.1%} - {summary}")
 
-            if accuracy == 1.0:
+            if accuracy >= min_accuracy:
                 show_instructions(PRACTICE_SUCCESS_TEXT.format(summary=summary))
                 break
             else:
