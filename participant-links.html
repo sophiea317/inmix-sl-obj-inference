@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Survey Links</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, sans-serif;
+    background: #fafbfc;
+    color: #222;
+    padding: 2rem;
+    line-height: 1.4;
+  }
+
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+    color: #00356B;
+    margin-bottom: 0.25rem;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+    margin: 1.5rem 0 0.75rem;
+    color: #333;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    margin: 1rem 0 0.5rem;
+    color: #00356B;
+    text-align: center;
+  }
+
+  .test-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+  }
+
+  .test-column {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .test-column:first-child::after {
+    content: '';
+    position: absolute;
+    right: -2rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, #00356B 10%, #00356B 90%, transparent);
+  }
+
+  .button-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background-color: #e7f0ff;
+    color: #00356B;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border: 2px solid #c8d8f0;
+    transition: all 0.2s ease;
+    text-align: center;
+  }
+
+  .btn:hover {
+    background-color: #00356B;
+    color: white;
+    border-color: #00356B;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 53, 107, 0.2);
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .debug {
+    margin-top: 2rem;
+    padding: 1rem;
+    border: 1px dashed #cc0000;
+    background-color: #fff5f5;
+    border-radius: 8px;
+  }
+
+  .debug a {
+    background-color: #ffe5e5;
+    border: 1px solid #ffbaba;
+    color: #b00000;
+  }
+
+  .debug a:hover {
+    background-color: #ffcccc;
+  }
+</style>
+</head>
+<body>
+
+<script>
+// Configuration
+const CONFIG = {
+  consentSurveyBase: 'https://yalesurvey.ca1.qualtrics.com/jfe/form/SV_4P0yT5JAfAagmEK',
+  postTaskSurveyBase: 'https://yalesurvey.ca1.qualtrics.com/jfe/form/SV_5jvZ5QkrZRTcWiy',
+  pythonScript: 'python run_sl-obj-inference.py',
+  startId: 1101,
+  endId: 1130
+};
+
+function generateRandomId() {
+  // Generate a random 6-character alphanumeric ID
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function buildUrl(base, subId, testType, randId) {
+  return `${base}?PPT_ID=${subId}&TEST=${testType}&RAND_ID=${randId}`;
+}
+
+function showInfo(subId, testType) {
+  const randId = generateRandomId();
+  const surveyUrl = buildUrl(CONFIG.consentSurveyBase, subId, testType, randId);
+  const postTaskUrl = buildUrl(CONFIG.postTaskSurveyBase, subId, testType, randId);
+  const pythonCmd = `${CONFIG.pythonScript} --sub ${subId} --ses ${randId} --test ${testType}`;
+  
+  const newPage = window.open('', '_blank');
+  newPage.document.write(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Participant ${subId} - ${testType}</title>
+      <style>
+        body {
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, sans-serif;
+          background: #fafbfc;
+          color: #222;
+          padding: 1rem;
+          line-height: 1.4;
+          max-width: 1100px;
+          margin: 0 auto;
+        }
+        h1 {
+          color: #00356B;
+          margin-bottom: 0.5rem;
+          font-size: 1.5rem;
+        }
+        .info-section {
+          background: white;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          padding: 1rem;
+          margin: 0.75rem 0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        h2 {
+          color: #00356B;
+          margin-top: 0;
+          font-size: 1rem;
+          border-bottom: 2px solid #00356B;
+          padding-bottom: 0.3rem;
+          margin-bottom: 0.75rem;
+        }
+        .info-label {
+          font-weight: 600;
+          color: #666;
+          margin-bottom: 0.3rem;
+          font-size: 0.85rem;
+        }
+        .info-content {
+          background: #f5f5f5;
+          padding: 0.6rem;
+          border-radius: 4px;
+          font-family: 'Monaco', 'Courier New', monospace;
+          font-size: 0.8rem;
+          word-wrap: break-word;
+          margin-bottom: 0.6rem;
+        }
+        .btn-group {
+          display: flex;
+          gap: 0.75rem;
+          margin-top: 0.6rem;
+        }
+        .btn {
+          padding: 0.5rem 1rem;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          font-weight: 600;
+          text-decoration: none;
+          display: inline-block;
+          text-align: center;
+          transition: all 0.2s;
+        }
+        .btn-primary {
+          background: #28a745;
+          color: white;
+        }
+        .btn-primary:hover {
+          background: #218838;
+        }
+        .copy-btn {
+          padding: 0.4rem 0.8rem;
+          background: #00356B;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 0.8rem;
+          font-weight: 600;
+          margin-top: 0.3rem;
+        }
+        .copy-btn:hover {
+          background: #002a54;
+        }
+        .copy-btn.copied {
+          background: #28a745;
+        }
+        .highlight {
+          background: #fff3cd;
+          padding: 0.6rem;
+          border-left: 3px solid #ffc107;
+          border-radius: 4px;
+          margin: 0.6rem 0 0 0;
+          font-size: 0.85rem;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>Participant ${subId} - ${testType} Test</h1>
+      
+      <div class="info-section">
+        <h2>1. Consent + Demographics Survey</h2>
+        <div class="info-label">Survey Link:</div>
+        <div class="info-content">${surveyUrl}</div>
+        <div class="btn-group">
+          <a class="btn btn-primary" href="${surveyUrl}" target="_blank">Open Survey</a>
+          <button class="copy-btn" onclick="copyToClipboard('${surveyUrl}', this)">Copy Link</button>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h2>2. Run Experiment</h2>
+        <div class="info-label">Python Command:</div>
+        <div class="info-content">${pythonCmd}</div>
+        <button class="copy-btn" onclick="copyToClipboard('${pythonCmd}', this)">Copy Command</button>
+      </div>
+
+      <div class="info-section">
+        <h2>3. Post-Task Questionnaire</h2>
+        <div class="info-label">Survey Link:</div>
+        <div class="info-content">${postTaskUrl}</div>
+        <div class="btn-group">
+          <a class="btn btn-primary" href="${postTaskUrl}" target="_blank">Open Questionnaire</a>
+          <button class="copy-btn" onclick="copyToClipboard('${postTaskUrl}', this)">Copy Link</button>
+        </div>
+      </div>
+
+      <script>
+        function copyToClipboard(text, button) {
+          navigator.clipboard.writeText(text).then(() => {
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            button.classList.add('copied');
+            
+            setTimeout(() => {
+              button.textContent = originalText;
+              button.classList.remove('copied');
+            }, 2000);
+          });
+        }
+      <\/script>
+    </body>
+    </html>
+  `);
+  newPage.document.close();
+}
+
+function copyToClipboard(text, button) {
+  navigator.clipboard.writeText(text).then(() => {
+    const originalText = button.textContent;
+    button.textContent = 'Copied!';
+    button.classList.add('copied');
+    
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.classList.remove('copied');
+    }, 2000);
+  });
+}
+
+// Generate buttons dynamically
+function generateButtons(testType, containerId) {
+  const container = document.getElementById(containerId);
+  for (let id = CONFIG.startId; id <= CONFIG.endId; id++) {
+    const btn = document.createElement('a');
+    btn.className = 'btn';
+    btn.href = '#';
+    btn.textContent = id;
+    btn.onclick = (e) => {
+      e.preventDefault();
+      showInfo(id.toString(), testType);
+    };
+    container.appendChild(btn);
+  }
+}
+
+// Initialize buttons when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  generateButtons('2-step', 'twoStepGrid');
+  generateButtons('1-step', 'oneStepGrid');
+});
+</script>
+
+<div class="container">
+<h1>Participant Links</h1>
+
+<div class="test-columns">
+  <div class="test-column">
+    <h2>2-Step Test (AD)</h2>
+    <div class="button-grid" id="twoStepGrid"></div>
+  </div>
+  
+  <div class="test-column">
+    <h2>1-Step Test (AC,BD)</h2>
+    <div class="button-grid" id="oneStepGrid"></div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>
