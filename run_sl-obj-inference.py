@@ -78,8 +78,8 @@ num_grps = 6
 num_reps = 40
 
 # Timing + keys
-IMG_DUR = 0.1#1.0*bug                       # 1000 ms per image in stream
-ISI_DUR = 0.05#0.5*bug                       # 500 ms between images in stream
+IMG_DUR = 1#1.0*bug                       # 1000 ms per image in stream
+ISI_DUR = 0.5#0.5*bug                       # 500 ms between images in stream
 PAUSE_DUR = (IMG_DUR*2)*bug             # 2500 ms pause between seqs in test
 FBCK_DUR = 0.15*bug                     # 150 ms feedback flash on response
 BREAK_DUR = 15                          # seconds for break countdown
