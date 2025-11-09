@@ -100,13 +100,13 @@ TXT_SIZE = 30*bug                       # text size
 # -----------------------------
 # Experiment setup
 # -----------------------------
-exp_name = "inmix-sl-obj-inference"
+exp_name = "inmix-sl-obj-inf"
 default_sub = f"{np.random.randint(1000, 9999):04d}" if args.sub is None else args.sub
 exp_info = {
     'subject': default_sub,
     'session': "001" if args.ses is None else args.ses,
-    'exposure': ["retrospective", "transitive"] if args.expo is None else args.expo,
-    'test': ["2-step", "1-step"] if args.test is None else args.test,
+    'exposure': "retrospective" if args.expo is None else args.expo,
+    'test': "2-step" if args.test is None else args.test,
     'date|hid': data.getDateStr(format="%Y%m%d-%H%M"),
     'exp_name|hid': exp_name,
     'psychopyVersion|hid': psychopy_ver,
@@ -127,7 +127,8 @@ os.makedirs(data_folder, exist_ok=True)
 
 # File prefix
 exp_info['file_prefix'] = (
-    f"sub-{exp_info['subject']}_{exp_info['exp_name|hid']}_test-{exp_info['test'].replace('-', '')}_{exp_info['date|hid']}"
+    #f"sub-{exp_info['subject']}_{exp_info['exp_name|hid']}_test-{exp_info['test'].replace('-', '')}_{exp_info['date|hid']}"
+    f"sub-{exp_info['subject']}_{exp_info['exp_name|hid']}_test-{exp_info['test'].replace('-', '')}_{exp_info['date|hid']}_id-{exp_info['session'].lower()}"
 )
 
 this_exp = data.ExperimentHandler(
