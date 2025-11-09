@@ -78,23 +78,19 @@ num_grps = 6
 num_reps = 40
 
 # Timing + keys
-IMG_DUR = 1#1.0*bug                       # 1000 ms per image in stream
-ISI_DUR = 0.5#0.5*bug                       # 500 ms between images in stream
+IMG_DUR = 1.0*bug                       # 1000 ms per image in stream
+ISI_DUR = 0.5*bug                       # 500 ms between images in stream
 PAUSE_DUR = (IMG_DUR*2)*bug             # 2500 ms pause between seqs in test
-FBCK_DUR = 0.15*bug                     # 150 ms feedback flash on response
+FBCK_DUR = 0.12*bug                     # 150 ms feedback flash on response
 BREAK_DUR = 15                          # seconds for break countdown
-
 EXPO_BIGGER_KEY = "f"
 EXPO_SMALLER_KEY = "j"
 TEST_SEQ1_KEY = "f"
 TEST_SEQ2_KEY = "j"
 
 # experiment constants
-RES = 400*bug                           # image size in pixels on screen
-IMG_SIZE = (RES, RES)                   # image size
 FIX_LINE = "white"                      # fixation line color
 FIX_FILL = "black"                      # fixation fill color
-TXT_SIZE = 30*bug                       # text size
 
 
 # -----------------------------
@@ -161,10 +157,25 @@ win = visual.Window(
     color=[0, 0, 0], colorSpace='rgb', units='pix'
 )
 
+# size calcs
+win_size = win.size
+wrap_wth = win_size[0]*0.65         # 65% of window width for text wrapping
+txt_sz = win_size[1]*0.04           # 4% of window height for text size
+res = int(win_size[1]*0.4)          # 40% of window height for image size
+img_sz = (res, res)                 # image size
+expo_txt_pos = -win_size[1]*0.25   # 25% down from center for response text
+small_txt_sz = txt_sz*0.75          # smaller text for exposure text
+
+print(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {txt_sz}\n Image size: {img_sz}\n Small text size: {small_txt_sz}\n Exposure text Y pos: {expo_txt_pos}")
+logging.info(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {txt_sz}\n Image size: {img_sz}\n Small text size: {small_txt_sz}\n Exposure text Y pos: {expo_txt_pos}") 
+# fixation constants
+radius=(res*0.012)*bug          # 1% of image size for fixation radius
+lineWidth=1.75*bug
+
 # central fixation, instruction text, and response prompt
-fixation = visual.Circle(win, radius=5*bug, fillColor=FIX_FILL, lineColor=FIX_LINE, pos=(0, 0))
-instr_text = visual.TextStim(win, text="", color="white", height=TXT_SIZE, wrapWidth=1000*bug)
-response_text_stim = visual.TextStim(win, text="", color="white", height=TXT_SIZE, pos=(0, -250*bug))
+fixation = visual.Circle(win, radius=radius, lineWidth=lineWidth, fillColor=FIX_FILL, lineColor=FIX_LINE, pos=(0, 0)) # outline fixation thickness*bug
+instr_text = visual.TextStim(win, text="", color="white", height=txt_sz, wrapWidth=wrap_wth)
+response_text_stim = visual.TextStim(win, text="", color="white", height=small_txt_sz, pos=(0, expo_txt_pos))
 
 # frame-rate and logging
 refresh_rate = win.getActualFrameRate()
@@ -256,7 +267,7 @@ def preload_images(images, practice=False):
             path = img
         else:
             path = os.path.join(imgs_folder, img)
-        cache[img] = visual.ImageStim(win, image=path, size=IMG_SIZE)
+        cache[img] = visual.ImageStim(win, image=path, size=img_sz)
     return cache
 
 def get_correct_key(extra_info):
@@ -338,7 +349,6 @@ def break_trial():
     
     return record  # return time spent on break, in case needed for logging
     
-# Otherwise, the task will start again immediately after the countdown.
 
 def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None):
     """Show one image with fixation and log timing; merged stim+ISI loop."""
@@ -547,7 +557,7 @@ def run_test(test_csv, label="test", practice=False):
             if not os.path.exists(img):
                 logging.error(f"Missing practice test image: {img}")
                 core.quit()
-            cache[img] = visual.ImageStim(win, image=img, size=IMG_SIZE)
+            cache[img] = visual.ImageStim(win, image=img, size=img_sz)
     else:
         # Real test images use preload_images function
         cache = preload_images(all_imgs)
@@ -636,12 +646,11 @@ def present_test_trial(row, trial_num, img_cache, label, practice=False):
     timing_log["seq2_img2_duration"] = seq2_img2_offset - seq2_img2_onset
 
     # Response prompt
-    response_prompt = (
-        f"Which sequence went together?\n\n"
-        f"Press '{TEST_SEQ1_KEY.upper()}' for FIRST sequence\n"
-        f"Press '{TEST_SEQ2_KEY.upper()}' for SECOND sequence"
+    response_prompt = TEST_RESP_PROMPT.format(
+        seq1_key=TEST_SEQ1_KEY.upper(),
+        seq2_key=TEST_SEQ2_KEY.upper()
     )
-    response_text = visual.TextStim(win, text=response_prompt, color="white", height=30, pos=(0, 0))
+    response_text = visual.TextStim(win, text=response_prompt, color="white", height=small_txt_sz, pos=(0, 0))
     response_text.draw()
     response_onset = win.flip()
     timing_log["response_onset"] = response_onset
@@ -723,14 +732,21 @@ test_data = []
 if RUN_EXPOSURE:
     # Run exposure practice before main exposure phase
     if RUN_PRACTICE:
-        show_instructions(WELCOME_PRACTICE_TEXT.format(
+        # Welcome text
+        show_instructions(EXPO_1_INSTRUCT.format(
+            bigger_key=EXPO_BIGGER_KEY.upper(),
+            smaller_key=EXPO_SMALLER_KEY.upper()
+        ))
+        # Practice instructions
+        show_instructions(EXPO_2_PRACTICE)
+        show_instructions(EXPO_KEY_REMINDER.format(
             bigger_key=EXPO_BIGGER_KEY.upper(),
             smaller_key=EXPO_SMALLER_KEY.upper()
         ))
         practice_attempt = 1
         max_practice_attempts = 20
         all_practice_data = []
-        min_accuracy = 0.0 #if args.debug else 1.0 # require 100% accuracy to pass practice unless in debug mode
+        min_accuracy = 0.0 if args.debug else 1.0 # require 100% accuracy to pass practice unless in debug mode
 
         while practice_attempt <= max_practice_attempts:
             logging.info(f"Practice attempt {practice_attempt}")
@@ -741,28 +757,28 @@ if RUN_EXPOSURE:
             logging.info(f"Practice accuracy: {accuracy:.1%} - {summary}")
 
             if accuracy >= min_accuracy:
-                show_instructions(PRACTICE_SUCCESS_TEXT.format(summary=summary))
+                show_instructions(EXPO_4_PRACT_DONE.format(accuracy=accuracy))
                 break
             else:
                 if practice_attempt >= max_practice_attempts:
-                    show_instructions(PRACTICE_MAX_ATTEMPTS_TEXT.format(
-                        max_attempts=max_practice_attempts, 
+                    show_instructions(EXPO_4_PRACT_DONE.format(
                         accuracy=accuracy
                     ))
                 else:
-                    show_instructions(PRACTICE_RETRY_TEXT.format(
+                    show_instructions(EXPO_3_PRACT_RETRY.format(
                         accuracy=accuracy,
                         bigger_key=EXPO_BIGGER_KEY.upper(),
                         smaller_key=EXPO_SMALLER_KEY.upper()
                     ))
                 practice_attempt += 1
 
-        show_instructions(MAIN_EXPOSURE_START_TEXT.format(
+        show_instructions(EXPO_MAIN_TEXT)
+        show_instructions(EXPO_KEY_REMINDER.format(
             bigger_key=EXPO_BIGGER_KEY.upper(),
             smaller_key=EXPO_SMALLER_KEY.upper()
         ))
     else:
-        show_instructions(EXPOSURE_NO_PRACTICE_TEXT.format(
+        show_instructions(EXPO_NO_PRACT.format(
             bigger_key=EXPO_BIGGER_KEY.upper(),
             smaller_key=EXPO_SMALLER_KEY.upper()
         ))
@@ -771,14 +787,20 @@ if RUN_EXPOSURE:
 if RUN_TESTS:
     # Run test practice phase before main test
     if RUN_PRACTICE:
-        show_instructions(TEST_PRACTICE_INTRO_TEXT.format(
+        show_instructions(TEST_1_INSTRUCT)
+        show_instructions(TEST_2_INSTRUCT.format(
             seq1_key=TEST_SEQ1_KEY.upper(),
             seq2_key=TEST_SEQ2_KEY.upper()
         ))
-        
+        show_instructions(TEST_3_PRACTICE)
+        show_instructions(TEST_KEY_REMINDER.format(
+            seq1_key=TEST_SEQ1_KEY.upper(),
+            seq2_key=TEST_SEQ2_KEY.upper()
+        ))
+
         # Practice test retry loop
         practice_test_attempt = 1
-        max_practice_test_attempts = 5
+        max_practice_test_attempts = 10
         all_practice_test_data = []
         
         while practice_test_attempt <= max_practice_test_attempts:
@@ -788,12 +810,13 @@ if RUN_TESTS:
             
             if current_practice_test_data:
                 test_accuracy, test_summary = calculate_accuracy(current_practice_test_data)
-                logging.info(f"Practice test accuracy: {test_accuracy:.1%} - {test_summary}")
                 
                 # Ask if they want to continue or retry
                 while True:
-                    retry_text = PRACTICE_TEST_COMPLETE_RETRY_TEXT
-                    
+                    retry_text = TEST_6_PRACT_RETRY.format(
+                        seq1_key=TEST_SEQ1_KEY.upper(),
+                        seq2_key=TEST_SEQ2_KEY.upper()
+                    )
                     instr_text.text = retry_text
                     instr_text.draw()
                     win.flip()
@@ -806,18 +829,18 @@ if RUN_TESTS:
                     elif keys[0] == 'c':
                         # Continue to main test
                         practice_test_data = all_practice_test_data
-                        show_instructions(PRACTICE_TEST_CONTINUE_TEXT)
+                        show_instructions(TEST_5_PRACT_CONT)
                         break
                     elif keys[0] == 'r':
                         # Retry practice test
                         if practice_test_attempt >= max_practice_test_attempts:
-                            show_instructions(PRACTICE_TEST_MAX_ATTEMPTS_TEXT.format(
+                            show_instructions(TEST_7_PRACT_MAX.format(
                                 max_attempts=max_practice_test_attempts
                             ))
                             practice_test_data = all_practice_test_data
                             break
                         else:
-                            show_instructions(PRACTICE_TEST_RETRY_TEXT.format(
+                            show_instructions(TEST_6_PRACT_RETRY.format(
                                 seq1_key=TEST_SEQ1_KEY.upper(),
                                 seq2_key=TEST_SEQ2_KEY.upper()
                             ))
@@ -828,21 +851,20 @@ if RUN_TESTS:
                 if keys[0] == 'c' or practice_test_attempt > max_practice_test_attempts:
                     break
             else:
-                show_instructions(PRACTICE_TEST_NO_DATA_TEXT)
+                show_instructions(TEST_5_PRACT_CONT)
                 practice_test_data = []
                 break
+        # If practice was run, show transition message
+        show_instructions(TEST_MAIN_TEXT)
+        show_instructions(TEST_KEY_REMINDER.format(
+            seq1_key=TEST_SEQ1_KEY.upper(),
+            seq2_key=TEST_SEQ2_KEY.upper()
+        ))
+        
     else:
         # No practice, initialize empty practice test data
         practice_test_data = []
         show_instructions(TEST_NO_PRACTICE_TEXT.format(
-            seq1_key=TEST_SEQ1_KEY.upper(),
-            seq2_key=TEST_SEQ2_KEY.upper()
-        ))
-    
-    # Show main test instructions (regardless of practice)
-    if RUN_PRACTICE:
-        # If practice was run, show transition message
-        show_instructions(MAIN_TEST_PHASE_TEXT.format(
             seq1_key=TEST_SEQ1_KEY.upper(),
             seq2_key=TEST_SEQ2_KEY.upper()
         ))
