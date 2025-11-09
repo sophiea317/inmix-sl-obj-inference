@@ -1,10 +1,30 @@
 # inmix-sl-obj-inference
 
+# Running from BW computers  
+```
+cd /media/bw-share/experiments/turk-browne_nbt2/allen_sda37/inmix-sl-obj-inference
+```
+```
+python run_sl-obj-inference.py --sub 1234 --ses 001 --expo retrospective --test 2-step --debug f --practice t --expoRun t --testRun t
+```
+or simply
+```
+python run_sl-obj-inference.py --sub 1234 --expo retrospective --test 2-step
+```
 
-inmix-sl-obj-inference/    
-└── run_sl-obj-inference.py     # main PsychoPy experiment runner  
-└── stimuli_generation.py       # makes stimuli or trial lists  
-└── exposure_trials.py          # generate exposure streams 
+# Experiment folder set-up
+```
+inmix-sl-obj-inference/  
+└── run_sl-obj-inference.py         # main PsychoPy experiment runner 
+└──data
+└──practice
+└──stimuli       
+└──utils  
+    └── stimuli_generation.py       # makes stimuli lists  
+    └── exposure_trials.py          # generate exposure streams 
+    └── test_trials.py              # generate test trials  
+    └── onscreen_text.py            # text for instructions
+```
 
 ### `exposure_trials.py`
 
