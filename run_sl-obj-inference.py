@@ -83,10 +83,12 @@ ISI_DUR = 0.5*bug                       # 500 ms between images in stream
 PAUSE_DUR = (IMG_DUR*2)*bug             # 2500 ms pause between seqs in test
 FBCK_DUR = 0.12*bug                     # 150 ms feedback flash on response
 BREAK_DUR = 15                          # seconds for break countdown
-EXPO_BIGGER_KEY = "f"
+EXPO_LARGER_KEY = "f"
 EXPO_SMALLER_KEY = "j"
 TEST_SEQ1_KEY = "f"
 TEST_SEQ2_KEY = "j"
+f_key = "F"
+j_key = "J"
 
 # experiment constants
 FIX_LINE = "white"                      # fixation line color
@@ -157,25 +159,28 @@ win = visual.Window(
     color=[0, 0, 0], colorSpace='rgb', units='pix'
 )
 
-# size calcs
+# size calculations
 win_size = win.size
-wrap_wth = win_size[0]*0.65         # 65% of window width for text wrapping
-txt_sz = win_size[1]*0.04           # 4% of window height for text size
-res = int(win_size[1]*0.4)          # 40% of window height for image size
-img_sz = (res, res)                 # image size
-expo_txt_pos = -win_size[1]*0.25   # 25% down from center for response text
-small_txt_sz = txt_sz*0.75          # smaller text for exposure text
+win_w = win_size[0]
+win_h = win_size[1]
+wrap_wth = int(win_w * 0.65)    # 65% of window width for text wrapping
+lg_txt = int(win_h * 0.038)     # 4% of window height for text size
+sm_txt= int(lg_txt * 0.75)      # smaller text for exposure text
+expo_txt_pos = -win_h * 0.25    # 25% down from center for response text
+res = int(win_h * 0.4)          # 40% of window height for image size
+img_sz = (res, res)             # image size
 
-print(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {txt_sz}\n Image size: {img_sz}\n Small text size: {small_txt_sz}\n Exposure text Y pos: {expo_txt_pos}")
-logging.info(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {txt_sz}\n Image size: {img_sz}\n Small text size: {small_txt_sz}\n Exposure text Y pos: {expo_txt_pos}") 
+print(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {lg_txt}\n Image size: {img_sz}\n Small text size: {sm_txt}\n Exposure text Y pos: {expo_txt_pos}")
+logging.info(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {lg_txt}\n Image size: {img_sz}\n Small text size: {sm_txt}\n Exposure text Y pos: {expo_txt_pos}") 
+
 # fixation constants
-radius=(res*0.012)*bug          # 1% of image size for fixation radius
-lineWidth=1.75*bug
+radius = (res*0.012)*bug          # 1% of image size for fixation radius
+lineWidth = 1.75*bug
 
 # central fixation, instruction text, and response prompt
 fixation = visual.Circle(win, radius=radius, lineWidth=lineWidth, fillColor=FIX_FILL, lineColor=FIX_LINE, pos=(0, 0)) # outline fixation thickness*bug
-instr_text = visual.TextStim(win, text="", color="white", height=txt_sz, wrapWidth=wrap_wth)
-response_text_stim = visual.TextStim(win, text="", color="white", height=small_txt_sz, pos=(0, expo_txt_pos))
+instr_text = visual.TextStim(win, text="", color="white", height=lg_txt, wrapWidth=wrap_wth)
+response_text_stim = visual.TextStim(win, text="", color="white", height=sm_txt, pos=(0, expo_txt_pos))
 
 # frame-rate and logging
 refresh_rate = win.getActualFrameRate()
@@ -359,10 +364,7 @@ def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None
     stim = img_cache[img_name]
 
     # Prepare response text 
-    response_text_stim.text = (
-        f"{EXPO_BIGGER_KEY.upper()} if BIGGER than last object\n"
-        f"{EXPO_SMALLER_KEY.upper()} if SMALLER than last object"
-    )
+    response_text_stim.text = EXPO_RESP_PROMPT.format(larger_key=f_key, smaller_key=j_key)
     
     if args.debug:
         response_text_stim.text += f"\n[DEBUG MODE: Trial {trial_num}]"
@@ -393,7 +395,7 @@ def present_trial(img_name, img_cache, duration, isi, trial_num, extra_info=None
             if k == "escape":
                 win.close()
                 core.quit()
-            elif k == EXPO_BIGGER_KEY or k == EXPO_SMALLER_KEY:
+            elif k == EXPO_LARGER_KEY or k == EXPO_SMALLER_KEY:
                 _flash_handler.start_flash()
                 responses.append({"key": k, "rt": rt})
 
@@ -646,11 +648,8 @@ def present_test_trial(row, trial_num, img_cache, label, practice=False):
     timing_log["seq2_img2_duration"] = seq2_img2_offset - seq2_img2_onset
 
     # Response prompt
-    response_prompt = TEST_RESP_PROMPT.format(
-        seq1_key=TEST_SEQ1_KEY.upper(),
-        seq2_key=TEST_SEQ2_KEY.upper()
-    )
-    response_text = visual.TextStim(win, text=response_prompt, color="white", height=small_txt_sz, pos=(0, 0))
+    response_prompt = TEST_RESP_PROMPT.format(seq1_key=f_key, seq2_key=j_key)
+    response_text = visual.TextStim(win, text=response_prompt, color="white", height=sm_txt, pos=(0, 0))
     response_text.draw()
     response_onset = win.flip()
     timing_log["response_onset"] = response_onset
@@ -733,16 +732,10 @@ if RUN_EXPOSURE:
     # Run exposure practice before main exposure phase
     if RUN_PRACTICE:
         # Welcome text
-        show_instructions(EXPO_1_INSTRUCT.format(
-            bigger_key=EXPO_BIGGER_KEY.upper(),
-            smaller_key=EXPO_SMALLER_KEY.upper()
-        ))
+        show_instructions(EXPO_1_INSTRUCT.format(larger_key=f_key, smaller_key=j_key))
         # Practice instructions
         show_instructions(EXPO_2_PRACTICE)
-        show_instructions(EXPO_KEY_REMINDER.format(
-            bigger_key=EXPO_BIGGER_KEY.upper(),
-            smaller_key=EXPO_SMALLER_KEY.upper()
-        ))
+        show_instructions(EXPO_KEY_REMINDER.format(larger_key=f_key, smaller_key=j_key))
         practice_attempt = 1
         max_practice_attempts = 20
         all_practice_data = []
@@ -761,42 +754,26 @@ if RUN_EXPOSURE:
                 break
             else:
                 if practice_attempt >= max_practice_attempts:
-                    show_instructions(EXPO_4_PRACT_DONE.format(
-                        accuracy=accuracy
-                    ))
+                    show_instructions(EXPO_4_PRACT_DONE.format(accuracy=accuracy))
                 else:
-                    show_instructions(EXPO_3_PRACT_RETRY.format(
-                        accuracy=accuracy,
-                        bigger_key=EXPO_BIGGER_KEY.upper(),
-                        smaller_key=EXPO_SMALLER_KEY.upper()
-                    ))
+                    show_instructions(EXPO_3_PRACT_RETRY.format(accuracy=accuracy,larger_key=f_key,smaller_key=j_key))
                 practice_attempt += 1
 
         show_instructions(EXPO_MAIN_TEXT)
-        show_instructions(EXPO_KEY_REMINDER.format(
-            bigger_key=EXPO_BIGGER_KEY.upper(),
-            smaller_key=EXPO_SMALLER_KEY.upper()
-        ))
+        show_instructions(EXPO_KEY_REMINDER.format(larger_key=f_key, smaller_key=j_key))
     else:
-        show_instructions(EXPO_NO_PRACT.format(
-            bigger_key=EXPO_BIGGER_KEY.upper(),
-            smaller_key=EXPO_SMALLER_KEY.upper()
-        ))
+        show_instructions(EXPO_NO_PRACT.format(larger_key=f_key, smaller_key=j_key))
+    
+    # Run exposure task
     main_data = run_stream(exposure_trials_csv, label="exposure")
 
 if RUN_TESTS:
     # Run test practice phase before main test
     if RUN_PRACTICE:
         show_instructions(TEST_1_INSTRUCT)
-        show_instructions(TEST_2_INSTRUCT.format(
-            seq1_key=TEST_SEQ1_KEY.upper(),
-            seq2_key=TEST_SEQ2_KEY.upper()
-        ))
+        show_instructions(TEST_2_INSTRUCT.format(seq1_key=f_key, seq2_key=j_key))
         show_instructions(TEST_3_PRACTICE)
-        show_instructions(TEST_KEY_REMINDER.format(
-            seq1_key=TEST_SEQ1_KEY.upper(),
-            seq2_key=TEST_SEQ2_KEY.upper()
-        ))
+        show_instructions(TEST_KEY_REMINDER.format(seq1_key=f_key, seq2_key=j_key))
 
         # Practice test retry loop
         practice_test_attempt = 1
@@ -813,11 +790,7 @@ if RUN_TESTS:
                 
                 # Ask if they want to continue or retry
                 while True:
-                    retry_text = TEST_6_PRACT_RETRY.format(
-                        seq1_key=TEST_SEQ1_KEY.upper(),
-                        seq2_key=TEST_SEQ2_KEY.upper()
-                    )
-                    instr_text.text = retry_text
+                    instr_text.text = TEST_6_PRACT_RETRY.format(seq1_key=f_key, seq2_key=j_key)
                     instr_text.draw()
                     win.flip()
 
@@ -834,16 +807,11 @@ if RUN_TESTS:
                     elif keys[0] == 'r':
                         # Retry practice test
                         if practice_test_attempt >= max_practice_test_attempts:
-                            show_instructions(TEST_7_PRACT_MAX.format(
-                                max_attempts=max_practice_test_attempts
-                            ))
+                            show_instructions(TEST_7_PRACT_MAX.format(max_attempts=max_practice_test_attempts))
                             practice_test_data = all_practice_test_data
                             break
                         else:
-                            show_instructions(TEST_6_PRACT_RETRY.format(
-                                seq1_key=TEST_SEQ1_KEY.upper(),
-                                seq2_key=TEST_SEQ2_KEY.upper()
-                            ))
+                            show_instructions(TEST_6_PRACT_RETRY.format(seq1_key=f_key, seq2_key=j_key))
                             practice_test_attempt += 1
                             break
                 
@@ -856,18 +824,11 @@ if RUN_TESTS:
                 break
         # If practice was run, show transition message
         show_instructions(TEST_MAIN_TEXT)
-        show_instructions(TEST_KEY_REMINDER.format(
-            seq1_key=TEST_SEQ1_KEY.upper(),
-            seq2_key=TEST_SEQ2_KEY.upper()
-        ))
-        
+        show_instructions(TEST_KEY_REMINDER.format(seq1_key=f_key, seq2_key=j_key))
     else:
         # No practice, initialize empty practice test data
         practice_test_data = []
-        show_instructions(TEST_NO_PRACTICE_TEXT.format(
-            seq1_key=TEST_SEQ1_KEY.upper(),
-            seq2_key=TEST_SEQ2_KEY.upper()
-        ))
+        show_instructions(TEST_NO_PRACTICE_TEXT.format(seq1_key=f_key, seq2_key=j_key))
     
     test_data = run_test(test_trials_csv, label="test", practice=False)
 
