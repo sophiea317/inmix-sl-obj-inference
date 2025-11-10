@@ -159,6 +159,9 @@ win = visual.Window(
     color=[0, 0, 0], colorSpace='rgb', units='pix'
 )
 
+# hide mouse cursor
+win.mouseVisible = False
+
 # size calculations
 win_size = win.size
 win_w = win_size[0]

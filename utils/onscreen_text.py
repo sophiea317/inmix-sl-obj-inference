@@ -11,7 +11,7 @@ EXPO_1_INSTRUCT = (
     "Welcome!\n\n"
     "You will see a series of object images appear one after another.\n"
     "Your task is to decide whether each object is LARGER or SMALLER than the one shown just before it.\n\n"
-    "All images will appear at the same size on the screen.\n"
+    "All images will appear as the same size on the screen.\n\n"
     "Base your decisions on each object's real-life size.\n\n"
     "Press '{larger_key}' if the current object is LARGER than the previous one.\n"
     "Press '{smaller_key}' if the current object is SMALLER than the previous one."
@@ -44,9 +44,9 @@ EXPO_4_PRACT_DONE = (
 EXPO_MAIN_TEXT = (
     "Now that you have completed the practice trials, you will begin the actual task.\n\n"
     "Everything will work the same way as in the practice, except now you will see real-world object images instead of icons.\n\n"
-    "All images will appear at the same size on the screen.\n"
+    "All images will appear as the same size on the screen.\n"
     "Base your answers on each object's real-life size.\n\n"
-    "You will have short break during the task.\n"
+    "You will have a few short breaks during the task.\n"
     "After each break, the first object shown will NOT have a previous object to compare to, so you should simply wait for the second image to appear before responding.\n\n"
     "Any questions before you continue?"
 )
