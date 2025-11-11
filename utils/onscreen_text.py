@@ -25,7 +25,6 @@ EXPO_2_PRACTICE = (
     "Any questions before we begin?"
 )
 
-
 EXPO_3_PRACT_RETRY = (
     "Accuracy: {accuracy:.1%}\n"
     "You need 100% accuracy to continue.\n\n"
@@ -93,7 +92,7 @@ TEST_2_INSTRUCT = (
 TEST_3_PRACTICE = (
     "Before you begin the actual test, you will complete a few practice trials to get used to the format.\n\n"
     "Practice tests will use simple black icons, like the practice for the larger/smaller task.\n\n"
-    "There are no right or wrong answers for the practice test. Instead, the goal is for you to get comfortable with the task.\n\n"
+    "There are no right or wrong answers for the practice test. Instead, the goal is for you to get comfortable with the format of the tests.\n\n"
     "Any questions before we begin?"
 )
 

@@ -293,9 +293,10 @@ def break_trial():
     remaining = BREAK_DUR
     instr_text.text = (
         f"Take a short break!\n\n"
-        f"Time remaining: {BREAK_DUR} seconds...\n\n"
+        f"Time remaining:\n"
+        f"{BREAK_DUR} seconds...\n\n"
         f"Press any key to continue to the experiment.\n"
-        f"Otherwise, the experiment will start again immediately after the countdown."
+        f"Otherwise, the experiment will start immediately after the countdown."
     )
     instr_text.draw()
     break_display_onset = win.flip()
@@ -313,9 +314,10 @@ def break_trial():
             remaining = max(0, BREAK_DUR - int(elapsed))
             instr_text.text = (
                 f"Take a short break!\n\n"
-                f"Time remaining: {remaining} seconds...\n\n"
+                f"Time remaining:\n"
+                f"{remaining} seconds...\n\n"
                 f"Press any key to continue to the experiment.\n"
-                f"Otherwise, the experiment will start again immediately after the countdown."
+                f"Otherwise, the experiment will start immediately after the countdown."
             )
             instr_text.draw()
             update_onset = win.flip()
