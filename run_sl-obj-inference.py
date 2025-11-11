@@ -166,15 +166,25 @@ win.mouseVisible = False
 win_size = win.size
 win_w = win_size[0]
 win_h = win_size[1]
-wrap_wth = int(win_w * 0.65)    # 65% of window width for text wrapping
-lg_txt = int(win_h * 0.038)     # 4% of window height for text size
+wrap_wth = int(win_w * 0.55)    # 50% of window width for text wrapping
+lg_txt = int(win_h * 0.03)      # 3% of window height for text size
 sm_txt= int(lg_txt * 0.75)      # smaller text for exposure text
 expo_txt_pos = -win_h * 0.25    # 25% down from center for response text
 res = int(win_h * 0.4)          # 40% of window height for image size
 img_sz = (res, res)             # image size
 
-print(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {lg_txt}\n Image size: {img_sz}\n Small text size: {sm_txt}\n Exposure text Y pos: {expo_txt_pos}")
-logging.info(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Text size: {lg_txt}\n Image size: {img_sz}\n Small text size: {sm_txt}\n Exposure text Y pos: {expo_txt_pos}") 
+# Print size info
+print(f"\n{'='*60}")
+print(f"STIMULUS SETUP INFO")
+print(f"{'='*60}")
+print(f"Window size: {win_size}")
+print(f"Text wrap width: {wrap_wth:.1f} px")
+print(f"Large text size: {lg_txt:.1f} px")
+print(f"Small text size: {sm_txt:.1f} px")
+print(f"Image size: {img_sz}")
+print(f"Exposure text Y position: {expo_txt_pos:.1f} px")
+print(f"{'='*60}\n")
+logging.info(f"Window size: {win_size}\n Text wrap width: {wrap_wth}\n Large text size: {lg_txt}\n Small text size: {sm_txt}\n Image size: {img_sz}\n Exposure text Y pos: {expo_txt_pos}") 
 
 # fixation constants
 radius = (res*0.012)*bug          # 1% of image size for fixation radius
@@ -529,9 +539,14 @@ def run_stream(csv_path, label="stream"):
         if trial_task == "break":      
             record = break_trial()
             record["phase"] = "break"
+            print(f"{'='*20}\n BREAK\n{'='*20}")
         else:
             record = present_trial(img_name, cache, IMG_DUR, ISI_DUR, i + 1, extra)
             record["phase"] = label
+            # print trial info to terminal
+            if not practice_flag:
+                print(f"block={record['block_num']} | tNum={record['block_tNum']} | label={record['stim_label_grp_num']} | obj={record['object']} | resp={record['last_key']}")
+
         records.append(record)
     return records
 
@@ -795,7 +810,7 @@ if RUN_TESTS:
                 
                 # Ask if they want to continue or retry
                 while True:
-                    instr_text.text = TEST_6_PRACT_RETRY.format(seq1_key=f_key, seq2_key=j_key)
+                    instr_text.text = TEST_4_PRACT_DONE
                     instr_text.draw()
                     win.flip()
 

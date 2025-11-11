@@ -12,7 +12,7 @@ import sys
 import os
 
 # Add utils folder to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../utils'))
 from onscreen_text import *
 
 # -----------------------------
@@ -64,8 +64,8 @@ win = visual.Window(
 win_size = win.size
 win_w = win_size[0]
 win_h = win_size[1]
-wrap_wth = int(win_w * 0.65)    # 65% of window width for text wrapping
-lg_txt = int(win_h * 0.038)     # 4% of window height for text size
+wrap_wth = int(win_w * 0.55)    # 50% of window width for text wrapping
+lg_txt = int(win_h * 0.03)     # 3% of window height for text size
 sm_txt= int(lg_txt * 0.75)      # smaller text for exposure text
 expo_txt_pos = -win_h * 0.25    # 25% down from center for response text
 res = int(win_h * 0.4)          # 40% of window height for image size
@@ -208,45 +208,45 @@ instr_text.pos = (0, 0)
 # EXPOSURE PHASE TEXTS
 # ===========================
 
-# # Test 1: Initial exposure instructions
-# show_screen(
-#     EXPO_1_INSTRUCT.format(larger_key=LARGER_KEY, smaller_key=SMALLER_KEY),
-#     show_fixation=False
-# )
+# Test 1: Initial exposure instructions
+show_screen(
+    EXPO_1_INSTRUCT.format(larger_key=LARGER_KEY, smaller_key=SMALLER_KEY),
+    show_fixation=False
+)
 
-# # Test 2: Practice introduction
-# show_screen(
-#     EXPO_2_PRACTICE,
-#     show_fixation=False
-# )
+# # # Test 2: Practice introduction
+show_screen(
+    EXPO_2_PRACTICE,
+    show_fixation=False
+)
 
-# # Test 3: Practice retry message
-# show_screen(
-#     EXPO_3_PRACT_RETRY.format(
-#         accuracy=0.75,
-#         larger_key=LARGER_KEY,
-#         smaller_key=SMALLER_KEY
-#     ),
-#     show_fixation=False
-# )
+# Test 3: Practice retry message
+show_screen(
+    EXPO_3_PRACT_RETRY.format(
+        accuracy=0.75,
+        larger_key=LARGER_KEY,
+        smaller_key=SMALLER_KEY
+    ),
+    show_fixation=False
+)
 
-# # Test 4: Practice done
-# show_screen(
-#     EXPO_4_PRACT_DONE.format(accuracy=1.0),
-#     show_fixation=False
-# )
+# Test 4: Practice done
+show_screen(
+    EXPO_4_PRACT_DONE.format(accuracy=1.0),
+    show_fixation=False
+)
 
 # # Test 5: Main exposure text
-# show_screen(
-#     EXPO_MAIN_TEXT,
-#     show_fixation=False
-# )
+show_screen(
+    EXPO_MAIN_TEXT,
+    show_fixation=False
+)
 
-# # Test 6: Key reminder
-# show_screen(
-#     EXPO_KEY_REMINDER.format(larger_key=LARGER_KEY, smaller_key=SMALLER_KEY),
-#     show_fixation=False
-# )
+# Test 6: Key reminder
+show_screen(
+    EXPO_KEY_REMINDER.format(larger_key=LARGER_KEY, smaller_key=SMALLER_KEY),
+    show_fixation=False
+)
 
 # # Test 7: No practice version
 # show_screen(
@@ -254,12 +254,12 @@ instr_text.pos = (0, 0)
 #     show_fixation=False
 # )
 
-# # Test 8: Exposure response prompt (with fixation)
-# show_screen(
-#     "",
-#     response_text=EXPO_RESP_PROMPT.format(larger_key=LARGER_KEY, smaller_key=SMALLER_KEY),
-#     show_fixation=True
-# )
+# Test 8: Exposure response prompt (with fixation)
+show_screen(
+    "",
+    response_text=EXPO_RESP_PROMPT.format(larger_key=LARGER_KEY, smaller_key=SMALLER_KEY),
+    show_fixation=True
+)
 
 # ===========================
 # TEST PHASE TEXTS
@@ -295,23 +295,23 @@ show_screen(
     show_fixation=False
 )
 
-# Test 14: Practice retry
+# # Test 14: Practice retry
 show_screen(
     TEST_6_PRACT_RETRY.format(seq1_key=SEQ1_KEY, seq2_key=SEQ2_KEY),
     show_fixation=False
 )
 
-# Test 15: Max attempts reached
+# # Test 15: Max attempts reached
 show_screen(
     TEST_7_PRACT_MAX.format(max_attempts=5),
     show_fixation=False
 )
 
 # Test 16: No practice test text
-show_screen(
-    TEST_NO_PRACTICE_TEXT.format(seq1_key=SEQ1_KEY, seq2_key=SEQ2_KEY),
-    show_fixation=False
-)
+# show_screen(
+#     TEST_NO_PRACTICE_TEXT.format(seq1_key=SEQ1_KEY, seq2_key=SEQ2_KEY),
+#     show_fixation=False
+# )
 
 # Test 17: Main test text
 show_screen(
