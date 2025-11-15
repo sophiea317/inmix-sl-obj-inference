@@ -116,6 +116,7 @@
 // Configuration
 const CONFIG = {
   consentSurveyBase: 'https://yalesurvey.ca1.qualtrics.com/jfe/form/SV_4P0yT5JAfAagmEK',
+  creditConsentBase: 'https://yalesurvey.ca1.qualtrics.com/jfe/form/SV_cuNi0QLk4ckU0U6',
   postTaskSurveyBase: 'https://yalesurvey.ca1.qualtrics.com/jfe/form/SV_5jvZ5QkrZRTcWiy',
   pythonScript: 'python run_sl-obj-inference.py',
   startId: 1101,
@@ -134,6 +135,7 @@ function buildUrl(base, subId, testType, randId) {
 function showInfo(subId, testType) {
   const randId = generateRandomId();
   const surveyUrl = buildUrl(CONFIG.consentSurveyBase, subId, testType, randId);
+  const creditUrl = buildUrl(CONFIG.creditConsentBase, subId, testType, randId);
   const postTaskUrl = buildUrl(CONFIG.postTaskSurveyBase, subId, testType, randId);
   const pythonCmd = `${CONFIG.pythonScript} --sub ${subId} --ses ${randId} --test ${testType}`;
   
@@ -246,12 +248,22 @@ function showInfo(subId, testType) {
       <h1>Participant ${subId} - ${testType} Test</h1>
       
       <div class="info-section">
-        <h2>1. Consent + Demographics Survey</h2>
+        <h2>1a. PAY: Consent + Demographics Survey</h2>
         <div class="info-label">Survey Link:</div>
         <div class="info-content">${surveyUrl}</div>
         <div class="btn-group">
           <a class="btn btn-primary" href="${surveyUrl}" target="_blank">Open Survey</a>
           <button class="copy-btn" onclick="copyToClipboard('${surveyUrl}', this)">Copy Link</button>
+        </div>
+      </div>
+    
+      <div class="info-section">
+        <h2>1b. CREDIT: Consent + Demographics Survey</h2>
+        <div class="info-label">Survey Link:</div>
+        <div class="info-content">${creditUrl}</div>
+        <div class="btn-group">
+          <a class="btn btn-primary" href="${creditUrl}" target="_blank">Open Survey</a>
+          <button class="copy-btn" onclick="copyToClipboard('${creditUrl}', this)">Copy Link</button>
         </div>
       </div>
 
